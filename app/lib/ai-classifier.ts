@@ -1,10 +1,13 @@
-export type AppCategory = 
-  | 'plumbing' 
-  | 'electrical' 
-  | 'hvac' 
-  | 'cleaning' 
-  | 'carpentry' 
-  | 'appliance' 
+import * as mobilenet from '@tensorflow-models/mobilenet';
+import '@tensorflow/tfjs';
+
+export type AppCategory =
+  | 'plumbing'
+  | 'electrical'
+  | 'hvac'
+  | 'cleaning'
+  | 'carpentry'
+  | 'appliance'
   | 'painting'
   | 'landscaping'
   | 'security'
@@ -14,47 +17,112 @@ export type AppCategory =
 // MobileNet classes are often specific (e.g., 'espresso maker', 'toilet seat')
 const CATEGORY_KEYWORDS: Record<AppCategory, string[]> = {
   plumbing: [
-    'toilet', 'bidet', 'sink', 'tub', 'bathtub', 'shower', 'faucet', 'spigot', 
-    'pipe', 'drain', 'plunger', 'washbasin', 'water jug', 'water bottle'
+    'toilet',
+    'bidet',
+    'sink',
+    'tub',
+    'bathtub',
+    'shower',
+    'faucet',
+    'spigot',
+    'pipe',
+    'drain',
+    'plunger',
+    'washbasin',
+    'water jug',
+    'water bottle',
   ],
   electrical: [
-    'switch', 'socket', 'plug', 'lamp', 'lampshade', 'light', 'bulb', 'chandelier', 
-    'heater', 'fan', 'electric', 'vacuum', 'iron', 'toaster', 'microwave'
+    'switch',
+    'socket',
+    'plug',
+    'lamp',
+    'lampshade',
+    'light',
+    'bulb',
+    'chandelier',
+    'heater',
+    'fan',
+    'electric',
+    'vacuum',
+    'iron',
+    'toaster',
+    'microwave',
   ],
-  hvac: [
-    'air conditioner', 'heater', 'radiator', 'stove', 'furnace', 'vent', 'cooler', 'fan'
-  ],
+  hvac: ['air conditioner', 'heater', 'radiator', 'stove', 'furnace', 'vent', 'cooler', 'fan'],
   appliance: [
-    'refrigerator', 'freezer', 'ice box', 'dishwasher', 'washer', 'washing machine', 'dryer', 
-    'microwave', 'stove', 'oven', 'toaster', 'coffee pot', 'espresso maker', 'coffeepot',
-    'television', 'monitor', 'screen', 'laptop', 'desktop', 'computer', 'printer'
+    'refrigerator',
+    'freezer',
+    'ice box',
+    'dishwasher',
+    'washer',
+    'washing machine',
+    'dryer',
+    'microwave',
+    'stove',
+    'oven',
+    'toaster',
+    'coffee pot',
+    'espresso maker',
+    'coffeepot',
+    'television',
+    'monitor',
+    'screen',
+    'laptop',
+    'desktop',
+    'computer',
+    'printer',
   ],
   carpentry: [
-    'door', 'wardrobe', 'cabinet', 'shelf', 'bookcase', 'desk', 'table', 'chair', 
-    'seat', 'sofa', 'couch', 'bed', 'closet', 'furniture', 'fence', 'lumber', 'wooden'
+    'door',
+    'wardrobe',
+    'cabinet',
+    'shelf',
+    'bookcase',
+    'desk',
+    'table',
+    'chair',
+    'seat',
+    'sofa',
+    'couch',
+    'bed',
+    'closet',
+    'furniture',
+    'fence',
+    'lumber',
+    'wooden',
   ],
   cleaning: [
-    'trash', 'waste', 'garbage', 'bin', 'broom', 'mop', 'bucket', 'soap', 'towel', 
-    'sponge', 'mess', 'dirt', 'dust'
+    'trash',
+    'waste',
+    'garbage',
+    'bin',
+    'broom',
+    'mop',
+    'bucket',
+    'soap',
+    'towel',
+    'sponge',
+    'mess',
+    'dirt',
+    'dust',
   ],
   painting: [
-    'wall', 'paint', 'brush' // Hard to detect 'painting' task from object, usually it's the object itself
+    'wall',
+    'paint',
+    'brush', // Hard to detect 'painting' task from object, usually it's the object itself
   ],
-  landscaping: [
-    'lawn', 'mower', 'grass', 'tree', 'plant', 'flower', 'garden', 'shovel', 'rake'
-  ],
-  security: [
-    'lock', 'padlock', 'key', 'gate', 'camera'
-  ],
-  other: []
+  landscaping: ['lawn', 'mower', 'grass', 'tree', 'plant', 'flower', 'garden', 'shovel', 'rake'],
+  security: ['lock', 'padlock', 'key', 'gate', 'camera'],
+  other: [],
 };
 
 class AIClassifier {
-  private model: any = null; // Type 'any' to avoid importing types top-level
+  private model: mobilenet.MobileNet | null = null;
   private isLoading = false;
-  private loadPromise: Promise<any> | null = null;
+  private loadPromise: Promise<mobilenet.MobileNet> | null = null;
 
-  async loadModel(): Promise<any> {
+  async loadModel(): Promise<mobilenet.MobileNet> {
     if (this.model) return this.model;
 
     if (this.isLoading && this.loadPromise) {
@@ -64,44 +132,35 @@ class AIClassifier {
     this.isLoading = true;
     console.log('Loading MobileNet model...');
 
-    // Dynamically import TensorFlow and MobileNet only when needed
-    this.loadPromise = (async () => {
-      try {
-        console.log('Importing TensorFlow dependencies...');
-        // We import these only here to avoid bundling them in the main chunk
-        const tf = await import('@tensorflow/tfjs');
-        const mobilenet = await import('@tensorflow-models/mobilenet');
-        
-        // Ensure backend is ready
-        await tf.ready();
-        
-        console.log('TensorFlow loaded, loading MobileNet...');
-        // Load the model
-        // version 2, alpha 1.0 is a good balance of speed/accuracy for browser
-        const model = await mobilenet.load({
-          version: 2,
-          alpha: 1.0
-        });
-        
+    // Load the model
+    // version 2, alpha 1.0 is a good balance of speed/accuracy for browser
+    this.loadPromise = mobilenet
+      .load({
+        version: 2,
+        alpha: 1.0,
+      })
+      .then((model) => {
         this.model = model;
         this.isLoading = false;
         console.log('MobileNet model loaded successfully');
         return model;
-      } catch (err) {
+      })
+      .catch((err) => {
         this.isLoading = false;
         this.loadPromise = null;
         console.error('Failed to load MobileNet model:', err);
         throw err;
-      }
-    })();
+      });
 
     return this.loadPromise;
   }
 
-  async classifyImage(imageElement: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement): Promise<{ category: AppCategory; confidence: number; label: string } | null> {
+  async classifyImage(
+    imageElement: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement
+  ): Promise<{ category: AppCategory; confidence: number; label: string } | null> {
     try {
       const model = await this.loadModel();
-      
+
       // Get top 3 predictions
       const predictions = await model.classify(imageElement, 3);
       console.log('AI Predictions:', predictions);
@@ -112,7 +171,7 @@ class AIClassifier {
 
       // Map predictions to our categories
       const bestMatch = this.findBestCategoryMatch(predictions);
-      
+
       return bestMatch;
     } catch (error) {
       console.error('Error classifying image:', error);
@@ -120,11 +179,13 @@ class AIClassifier {
     }
   }
 
-  async classifyFile(file: File): Promise<{ category: AppCategory; confidence: number; label: string } | null> {
+  async classifyFile(
+    file: File
+  ): Promise<{ category: AppCategory; confidence: number; label: string } | null> {
     return new Promise((resolve, reject) => {
       const img = document.createElement('img');
       img.src = URL.createObjectURL(file);
-      
+
       img.onload = async () => {
         try {
           const result = await this.classifyImage(img);
@@ -135,7 +196,7 @@ class AIClassifier {
           reject(err);
         }
       };
-      
+
       img.onerror = (err) => {
         URL.revokeObjectURL(img.src);
         reject(err);
@@ -143,26 +204,30 @@ class AIClassifier {
     });
   }
 
-  private findBestCategoryMatch(predictions: Array<{ className: string; probability: number }>): { category: AppCategory; confidence: number; label: string } {
+  private findBestCategoryMatch(predictions: Array<{ className: string; probability: number }>): {
+    category: AppCategory;
+    confidence: number;
+    label: string;
+  } {
     // We'll iterate through predictions and see if any keywords match our categories
-    
+
     for (const prediction of predictions) {
       const label = prediction.className.toLowerCase();
-      
+
       // Check each category for keywords
       for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
         // Fix: Cast category to AppCategory to respect types
         const appCategory = category as AppCategory;
-        
+
         // Skip 'other' for keyword matching
         if (appCategory === 'other') continue;
 
-        if (keywords.some(keyword => label.includes(keyword))) {
+        if (keywords.some((keyword) => label.includes(keyword))) {
           console.log(`Matched '${label}' to category '${appCategory}'`);
           return {
             category: appCategory,
             confidence: prediction.probability,
-            label: prediction.className
+            label: prediction.className,
           };
         }
       }
@@ -172,7 +237,7 @@ class AIClassifier {
     return {
       category: 'other',
       confidence: predictions[0].probability,
-      label: predictions[0].className
+      label: predictions[0].className,
     };
   }
 }
