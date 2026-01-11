@@ -1,0 +1,748 @@
+"use client";
+
+/**
+ * Sign Up Page
+ * 
+ * User registration page with email/password, phone, and social sign-up options.
+ * Uses Firebase Client SDK functions from lib/firebaseClient.ts.
+ * 
+ * Features:
+ * - Email/password OR phone number registration with role selection
+ * - Social sign-up (Google, Facebook, Apple)
+ * - Client-side validation (email format, password match, min length, phone format)
+ * - Loading states and error handling
+ * - Accessibility support (ARIA labels, focus management)
+ * - Reduced motion support for animations
+ * 
+ * On successful sign up, redirects to /dashboard.
+ */
+
+import React, { useState, useRef } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { motion, useReducedMotion } from "framer-motion";
+import { Listbox, Transition } from "@headlessui/react";
+import { 
+  createUserWithEmail, 
+  signInWithGoogle,
+  signInWithFacebook,
+  signInWithApple,
+  initializeRecaptcha,
+  sendPhoneVerificationCode,
+  verifyPhoneCode,
+  type UserRole 
+} from "@/app/lib/firebaseClient";
+
+const ROLES: { value: UserRole; label: string; description: string }[] = [
+  { value: "resident", label: "Resident", description: "Submit and track maintenance requests" },
+  { value: "technician", label: "Technician", description: "Receive and complete work orders" },
+  { value: "admin", label: "Administrator", description: "Manage users and oversee operations" },
+];
+
+type SignUpMethod = "email" | "phone";
+
+export default function SignUpPage() {
+  const router = useRouter();
+  const shouldReduceMotion = useReducedMotion();
+  const recaptchaContainerRef = useRef<HTMLDivElement>(null);
+
+  // Sign-up method toggle
+  const [signUpMethod, setSignUpMethod] = useState<SignUpMethod>("email");
+
+  // Form state
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [role, setRole] = useState<UserRole>("resident");
+
+  // UI state
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [codeSent, setCodeSent] = useState(false);
+  const [confirmationResult, setConfirmationResult] = useState<unknown>(null);
+
+  // Validation errors
+  const [nameError, setNameError] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [confirmPasswordError, setConfirmPasswordError] = useState("");
+  const [codeError, setCodeError] = useState("");
+
+  const validateName = (name: string): boolean => {
+    if (!name.trim()) {
+      setNameError("Full name is required");
+      return false;
+    }
+    if (name.trim().length < 2) {
+      setNameError("Name must be at least 2 characters");
+      return false;
+    }
+    setNameError("");
+    return true;
+  };
+
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email) {
+      setEmailError("Email is required");
+      return false;
+    }
+    if (!emailRegex.test(email)) {
+      setEmailError("Please enter a valid email");
+      return false;
+    }
+    setEmailError("");
+    return true;
+  };
+
+  const validatePhone = (phone: string): boolean => {
+    // E.164 format: +[country code][number]
+    const phoneRegex = /^\+[1-9]\d{1,14}$/;
+    if (!phone) {
+      setPhoneError("Phone number is required");
+      return false;
+    }
+    if (!phoneRegex.test(phone)) {
+      setPhoneError("Please enter a valid phone number (e.g., +1234567890)");
+      return false;
+    }
+    setPhoneError("");
+    return true;
+  };
+
+  const validatePassword = (password: string): boolean => {
+    if (!password) {
+      setPasswordError("Password is required");
+      return false;
+    }
+    if (password.length < 6) {
+      setPasswordError("Password must be at least 6 characters");
+      return false;
+    }
+    setPasswordError("");
+    return true;
+  };
+
+  const validateConfirmPassword = (confirmPassword: string, password: string): boolean => {
+    if (!confirmPassword) {
+      setConfirmPasswordError("Please confirm your password");
+      return false;
+    }
+    if (confirmPassword !== password) {
+      setConfirmPasswordError("Passwords do not match");
+      return false;
+    }
+    setConfirmPasswordError("");
+    return true;
+  };
+
+  const validateCode = (code: string): boolean => {
+    if (!code || code.length !== 6) {
+      setCodeError("Please enter the 6-digit code");
+      return false;
+    }
+    setCodeError("");
+    return true;
+  };
+
+  const handleEmailPasswordSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+
+    // Validate all inputs
+    const isNameValid = validateName(name);
+    const isEmailValid = validateEmail(email);
+    const isPasswordValid = validatePassword(password);
+    const isConfirmPasswordValid = validateConfirmPassword(confirmPassword, password);
+
+    if (!isNameValid || !isEmailValid || !isPasswordValid || !isConfirmPasswordValid) {
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      await createUserWithEmail(email, password, name.trim(), role);
+      
+      // Store user profile in localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('userProfile', JSON.stringify({
+          displayName: name.trim(),
+          email: email,
+          role: role,
+        }));
+      }
+      
+      // On success, navigate to dashboard
+      router.push("/dashboard");
+    } catch (err: unknown) {
+      console.error("Sign up error:", err);
+      if (err instanceof Error) {
+        // Handle Firebase auth errors
+        if (err.message.includes("email-already-in-use") || err.message.includes("account with this email already exists")) {
+          setError("An account with this email already exists. Please sign in instead.");
+        } else if (err.message.includes("weak-password")) {
+          setError("Password is too weak. Please use a stronger password.");
+        } else if (err.message.includes("invalid-email")) {
+          setError("Invalid email address.");
+        } else {
+          setError(err.message || "Failed to create account. Please try again.");
+        }
+      } else {
+        setError("An unexpected error occurred");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSocialSignUp = async (provider: "google" | "facebook" | "apple") => {
+    setError("");
+    setLoading(true);
+
+    try {
+      let userCredential;
+      
+      switch (provider) {
+        case "google":
+          userCredential = await signInWithGoogle();
+          break;
+        case "facebook":
+          userCredential = await signInWithFacebook();
+          break;
+        case "apple":
+          userCredential = await signInWithApple();
+          break;
+        default:
+          throw new Error("Unknown provider");
+      }
+
+      // Sync user to MongoDB with default resident role
+      // Social auth users can update their role later in profile settings
+      const response = await fetch('/api/users/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firebaseUid: userCredential.user.uid,
+          email: userCredential.user.email || undefined,
+          phoneNumber: userCredential.user.phoneNumber || undefined,
+          displayName: userCredential.user.displayName || name || 'User',
+          role: role || 'resident',
+        }),
+      });
+
+      if (!response.ok && response.status !== 409) {
+        console.error('Failed to sync user to MongoDB');
+      }
+
+      // Store user profile
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('userProfile', JSON.stringify({
+          displayName: userCredential.user.displayName || name || 'User',
+          email: userCredential.user.email,
+          role: role || 'resident',
+        }));
+      }
+
+      router.push("/dashboard");
+    } catch (err: unknown) {
+      console.error(`${provider} sign up error:`, err);
+      if (err instanceof Error) {
+        if (err.message.includes("popup-closed-by-user")) {
+          setError("Sign-in cancelled");
+        } else if (err.message.includes("account-exists-with-different-credential")) {
+          setError("An account already exists with this email using a different sign-in method");
+        } else {
+          setError(err.message || `Failed to sign up with ${provider}`);
+        }
+      } else {
+        setError(`Failed to sign up with ${provider}`);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendPhoneCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+
+    const isNameValid = validateName(name);
+    const isPhoneValid = validatePhone(phoneNumber);
+
+    if (!isNameValid || !isPhoneValid) {
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const recaptchaVerifier = initializeRecaptcha('recaptcha-container');
+      
+      if (!recaptchaVerifier) {
+        throw new Error('Failed to initialize reCAPTCHA');
+      }
+
+      const result = await sendPhoneVerificationCode(phoneNumber, recaptchaVerifier);
+      setConfirmationResult(result);
+      setCodeSent(true);
+    } catch (err: unknown) {
+      console.error("Phone verification error:", err);
+      if (err instanceof Error) {
+        setError(err.message || "Failed to send verification code");
+      } else {
+        setError("Failed to send verification code");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyPhoneCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+
+    const isCodeValid = validateCode(verificationCode);
+
+    if (!isCodeValid || !confirmationResult) {
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const userCredential = await verifyPhoneCode(confirmationResult as never, verificationCode);
+
+      // Sync user to MongoDB
+      const response = await fetch('/api/users/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firebaseUid: userCredential.user.uid,
+          phoneNumber: phoneNumber,
+          displayName: name.trim(),
+          role: role,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        if (response.status === 409) {
+          throw new Error(errorData.error || 'An account with this phone number already exists');
+        }
+      }
+
+      // Store user profile
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('userProfile', JSON.stringify({
+          displayName: name.trim(),
+          phoneNumber: phoneNumber,
+          role: role,
+        }));
+      }
+
+      router.push("/dashboard");
+    } catch (err: unknown) {
+      console.error("Phone verification error:", err);
+      if (err instanceof Error) {
+        if (err.message.includes("invalid-verification-code")) {
+          setError("Invalid verification code. Please try again.");
+        } else if (err.message.includes("account with this phone number already exists")) {
+          setError("An account with this phone number already exists. Please sign in instead.");
+        } else {
+          setError(err.message || "Failed to verify code");
+        }
+      } else {
+        setError("Failed to verify code");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-6 py-12" style={{ background: "var(--bg)" }}>
+      <motion.div
+        initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: shouldReduceMotion ? 0 : 0.24 }}
+        className="w-full max-w-md"
+      >
+        {/* Logo and Header */}
+        <div className="text-center mb-8">
+          <Link href="/" className="inline-flex items-center gap-2 mb-6">
+            <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden>
+              <rect x="4" y="4" width="32" height="32" rx="8" fill="var(--accent)" fillOpacity="0.1" />
+              <path
+                d="M12 20L18 26L28 14"
+                stroke="var(--accent)"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <span className="text-2xl font-bold" style={{ color: "var(--card-contrast-text)" }}>
+              FixItNow
+            </span>
+          </Link>
+          <h1 className="text-3xl font-bold mb-2" style={{ color: "var(--card-contrast-text)" }}>
+            Create an account
+          </h1>
+          <p style={{ color: "var(--muted)" }}>Get started with FixItNow today</p>
+          
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 mt-4 text-sm font-medium hover:opacity-80 transition-opacity"
+            style={{ color: "var(--muted)" }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 12H5m0 0l7 7m-7-7l7-7" />
+            </svg>
+            Back to Home
+          </Link>
+        </div>
+
+        {/* Main Card */}
+        <div className="card p-8">
+          {/* Social Sign Up Buttons */}
+          <div className="space-y-3 mb-6">
+            <button
+              type="button"
+              onClick={() => handleSocialSignUp("google")}
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg border font-medium transition-all hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ background: "var(--card)", borderColor: "rgba(15,23,42,0.1)" }}
+              aria-label="Sign up with Google"
+            >
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path
+                  d="M18.17 8.37H10v3.63h4.69c-.38 2.08-2.21 3.63-4.69 3.63a5.25 5.25 0 110-10.5c1.27 0 2.42.45 3.32 1.2l2.67-2.67A9 9 0 1010 19c4.97 0 9-4.03 9-9 0-.6-.05-1.19-.14-1.76-.03-.21-.12-.43-.27-.6-.15-.17-.35-.27-.57-.27z"
+                  fill="#4285F4"
+                />
+              </svg>
+              <span style={{ color: "var(--card-contrast-text)" }}>Continue with Google</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSocialSignUp("facebook")}
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg border font-medium transition-all hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ background: "var(--card)", borderColor: "rgba(15,23,42,0.1)" }}
+              aria-label="Sign up with Facebook"
+            >
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="#1877F2">
+                <path d="M20 10c0-5.523-4.477-10-10-10S0 4.477 0 10c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V10h2.54V7.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V10h2.773l-.443 2.89h-2.33v6.988C16.343 19.128 20 14.991 20 10z" />
+              </svg>
+              <span style={{ color: "var(--card-contrast-text)" }}>Continue with Facebook</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSocialSignUp("apple")}
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg border font-medium transition-all hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ background: "var(--card)", borderColor: "rgba(15,23,42,0.1)" }}
+              aria-label="Sign up with Apple"
+            >
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M15.5 8.5c0-.83-.14-1.64-.42-2.38C14.64 5.25 14 4.5 13.17 4c-.83-.5-1.78-.75-2.67-.75-1 0-1.92.33-2.75.83-.83.5-1.5 1.25-1.92 2.08C5.42 6.86 5.25 7.67 5.25 8.5c0 .83.14 1.64.42 2.38.44.87 1.08 1.62 1.92 2.12.83.5 1.75.75 2.66.75 1 0 1.92-.33 2.75-.83.83-.5 1.5-1.25 1.92-2.08.28-.74.42-1.55.42-2.34zm-3.33-5.75c.41 0 .83.08 1.25.25.41.17.75.42 1 .75.25.33.42.75.42 1.25 0 .33-.08.66-.25.91-.17.25-.42.42-.75.5-.33.08-.67 0-.92-.25-.25-.25-.41-.58-.41-.91 0-.42.16-.83.5-1.08.33-.25.75-.42 1.16-.42z" />
+              </svg>
+              <span style={{ color: "var(--card-contrast-text)" }}>Continue with Apple</span>
+            </button>
+          </div>
+
+          {/* Divider */}
+          <div className="relative mb-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t" style={{ borderColor: "rgba(15,23,42,0.08)" }} />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4" style={{ background: "var(--card)", color: "var(--muted)" }}>
+                Or continue with email
+              </span>
+            </div>
+          </div>
+
+          {/* Error Message */}
+          {error && (
+            <motion.div
+              initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200"
+              role="alert"
+            >
+              <p className="text-sm text-red-800">{error}</p>
+            </motion.div>
+          )}
+
+          {/* Email/Password Form */}
+          <form onSubmit={handleEmailPasswordSignUp} className="space-y-4">
+            <div>
+              <label htmlFor="name" className="block text-sm font-medium mb-2" style={{ color: "var(--card-contrast-text)" }}>
+                Full name
+              </label>
+              <input
+                id="name"
+                type="text"
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (nameError) validateName(e.target.value);
+                }}
+                onBlur={() => validateName(name)}
+                disabled={loading}
+                aria-invalid={!!nameError}
+                aria-describedby={nameError ? "name-error" : undefined}
+                className="w-full px-4 py-3 rounded-lg border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  background: "var(--card)",
+                  borderColor: nameError ? "#ef4444" : "rgba(15,23,42,0.1)",
+                  color: "var(--card-contrast-text)",
+                }}
+                placeholder="John Doe"
+              />
+              {nameError && (
+                <p id="name-error" className="mt-1 text-sm text-red-600" role="alert">
+                  {nameError}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium mb-2" style={{ color: "var(--card-contrast-text)" }}>
+                Email address
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (emailError) validateEmail(e.target.value);
+                }}
+                onBlur={() => validateEmail(email)}
+                disabled={loading}
+                aria-invalid={!!emailError}
+                aria-describedby={emailError ? "email-error" : undefined}
+                className="w-full px-4 py-3 rounded-lg border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  background: "var(--card)",
+                  borderColor: emailError ? "#ef4444" : "rgba(15,23,42,0.1)",
+                  color: "var(--card-contrast-text)",
+                }}
+                placeholder="you@example.com"
+              />
+              {emailError && (
+                <p id="email-error" className="mt-1 text-sm text-red-600" role="alert">
+                  {emailError}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium mb-2" style={{ color: "var(--card-contrast-text)" }}>
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (passwordError) validatePassword(e.target.value);
+                  if (confirmPassword) validateConfirmPassword(confirmPassword, e.target.value);
+                }}
+                onBlur={() => validatePassword(password)}
+                disabled={loading}
+                aria-invalid={!!passwordError}
+                aria-describedby={passwordError ? "password-error" : undefined}
+                className="w-full px-4 py-3 rounded-lg border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  background: "var(--card)",
+                  borderColor: passwordError ? "#ef4444" : "rgba(15,23,42,0.1)",
+                  color: "var(--card-contrast-text)",
+                }}
+                placeholder="••••••••"
+              />
+              {passwordError && (
+                <p id="password-error" className="mt-1 text-sm text-red-600" role="alert">
+                  {passwordError}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="confirm-password" className="block text-sm font-medium mb-2" style={{ color: "var(--card-contrast-text)" }}>
+                Confirm password
+              </label>
+              <input
+                id="confirm-password"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  if (confirmPasswordError) validateConfirmPassword(e.target.value, password);
+                }}
+                onBlur={() => validateConfirmPassword(confirmPassword, password)}
+                disabled={loading}
+                aria-invalid={!!confirmPasswordError}
+                aria-describedby={confirmPasswordError ? "confirm-password-error" : undefined}
+                className="w-full px-4 py-3 rounded-lg border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  background: "var(--card)",
+                  borderColor: confirmPasswordError ? "#ef4444" : "rgba(15,23,42,0.1)",
+                  color: "var(--card-contrast-text)",
+                }}
+                placeholder="••••••••"
+              />
+              {confirmPasswordError && (
+                <p id="confirm-password-error" className="mt-1 text-sm text-red-600" role="alert">
+                  {confirmPasswordError}
+                </p>
+              )}
+            </div>
+
+            {/* Role Selector */}
+            <div>
+              <Listbox value={role} onChange={setRole} disabled={loading}>
+                {({ open }) => (
+                  <>
+                    <Listbox.Label className="block text-sm font-medium mb-2" style={{ color: "var(--card-contrast-text)" }}>
+                      I am a
+                    </Listbox.Label>
+                    <div className="relative">
+                      <Listbox.Button
+                        className="relative w-full px-4 py-3 rounded-lg border text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between"
+                        style={{
+                          background: "var(--card)",
+                          borderColor: "rgba(15,23,42,0.1)",
+                          color: "var(--card-contrast-text)",
+                        }}
+                        aria-label="Select your role"
+                      >
+                        <span>{ROLES.find((r) => r.value === role)?.label}</span>
+                        <svg
+                          className={`w-5 h-5 transition-transform ${open ? "rotate-180" : ""}`}
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </Listbox.Button>
+
+                      <Transition
+                        show={open}
+                        as={React.Fragment}
+                        leave="transition ease-in duration-100"
+                        leaveFrom="opacity-100"
+                        leaveTo="opacity-0"
+                      >
+                        <Listbox.Options
+                          className="absolute z-10 mt-2 w-full rounded-lg border overflow-hidden"
+                          style={{
+                            background: "var(--card)",
+                            borderColor: "rgba(15,23,42,0.1)",
+                            boxShadow: "var(--shadow-md)",
+                          }}
+                        >
+                          {ROLES.map((roleOption) => (
+                            <Listbox.Option
+                              key={roleOption.value}
+                              value={roleOption.value}
+                              className={({ active }) =>
+                                `cursor-pointer px-4 py-3 transition-colors ${
+                                  active ? "opacity-80" : ""
+                                }`
+                              }
+                              style={{
+                                background: "var(--card)",
+                              }}
+                            >
+                              {({ selected }) => (
+                                <div className="flex items-start gap-3">
+                                  <div
+                                    className={`flex-none w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${
+                                      selected ? "border-blue-600" : "border-gray-300"
+                                    }`}
+                                  >
+                                    {selected && (
+                                      <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div
+                                      className="font-medium"
+                                      style={{ color: "var(--card-contrast-text)" }}
+                                    >
+                                      {roleOption.label}
+                                    </div>
+                                    <div className="text-sm" style={{ color: "var(--muted)" }}>
+                                      {roleOption.description}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </Listbox.Option>
+                          ))}
+                        </Listbox.Options>
+                      </Transition>
+                    </div>
+                  </>
+                )}
+              </Listbox>
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full accent-btn px-4 py-3 rounded-lg font-medium transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                  <span>Creating account...</span>
+                </>
+              ) : (
+                "Create account"
+              )}
+            </button>
+          </form>
+
+          {/* Sign In Link */}
+          <p className="mt-6 text-center text-sm" style={{ color: "var(--muted)" }}>
+            Already have an account?{" "}
+            <Link href="/auth/signin" className="font-medium hover:opacity-80 transition-opacity" style={{ color: "var(--accent)" }}>
+              Sign in
+            </Link>
+          </p>
+        </div>
+
+        {/* Terms Notice */}
+        <p className="mt-6 text-center text-xs" style={{ color: "var(--muted)" }}>
+          By creating an account, you agree to our{" "}
+          <a href="/terms" className="hover:opacity-80 transition-opacity" style={{ color: "var(--accent)" }}>
+            Terms of Service
+          </a>{" "}
+          and{" "}
+          <a href="/privacy" className="hover:opacity-80 transition-opacity" style={{ color: "var(--accent)" }}>
+            Privacy Policy
+          </a>
+        </p>
+      </motion.div>
+    </div>
+  );
+}

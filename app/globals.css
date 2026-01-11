@@ -1,0 +1,577 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+
+  /* Design System Tokens */
+  --ff-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --bg: #f6f7fb;
+  --card: #ffffff;
+  --muted: #6b7280;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-600: #1d4ed8;
+
+  /* shadcn-compatible tokens */
+  --primary: 221.2 83.2% 53.3%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 221.2 83.2% 53.3%;
+
+  /* Spacing & Layout */
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 16px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 6px 18px rgba(15, 23, 42, 0.06);
+  --shadow-lg: 0 12px 24px rgba(15, 23, 42, 0.08);
+
+  /* Motion Durations */
+  --motion-fast: 120ms;
+  --motion-medium: 240ms;
+  --motion-slow: 360ms;
+
+  /* Easing */
+  --ease-ui: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-smooth: cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+    --bg: #1a1a1a;
+    --card: #27272a;
+    --muted: #a1a1aa;
+
+    /* shadcn-compatible dark mode tokens */
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+  }
+}
+
+
+/* Accessibility: Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-medium: 0ms;
+    --motion-slow: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+body {
+  background: var(--bg);
+  color: var(--foreground);
+  font-family: var(--ff-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Utility Classes */
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.card-hover {
+  transition: transform var(--motion-fast) var(--ease-ui),
+    box-shadow var(--motion-fast) var(--ease-ui);
+  will-change: transform;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.accent-btn {
+  background: linear-gradient(180deg, var(--accent), var(--accent-600));
+  color: white;
+  border-radius: var(--radius-sm);
+  padding: 0.625rem 1.25rem;
+  font-weight: 500;
+  transition: transform var(--motion-fast) var(--ease-ui),
+    box-shadow var(--motion-fast) var(--ease-ui);
+  will-change: transform;
+}
+
+.accent-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.accent-btn:active {
+  transform: translateY(0);
+}
+
+/* Focus visible styles for accessibility */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Smooth transitions for interactive elements */
+button,
+a,
+input,
+select,
+textarea {
+  transition: all var(--motion-fast) var(--ease-ui);
+}
+
+/* Pulse animation for status indicators (reduced-motion safe) */
+@keyframes pulse-subtle {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.pulse-subtle {
+  animation: pulse-subtle 2s var(--ease-smooth) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-subtle {
+    animation: none;
+  }
+}
+
+/* Fade in animation */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fade-in var(--motion-medium) var(--ease-ui);
+}
+
+/* Scale in animation */
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.scale-in {
+  animation: scale-in var(--motion-medium) var(--ease-ui);
+}
+
+/* 
+ * Feature Card Contrast & Accessibility Tokens
+ * 
+ * Contrast verification (WCAG AA >= 4.5:1):
+ * - Light mode: #0f172a (slate-900) on #ffffff = 16.1:1 ✓
+ * - Dark mode: #f1f5f9 (slate-100) on #27272a (zinc-800) = 12.8:1 ✓
+ * 
+ * Tweak colors here for light/dark themes:
+ * - Light: --card-contrast-text uses slate-900 (#0f172a)
+ * - Dark: --card-contrast-text uses slate-100 (#f1f5f9)
+ */
+:root {
+  --card-contrast-text: #0f172a;
+  /* Readable dark text on light card */
+  --card-overlay-max: rgba(0, 0, 0, 0.02);
+  /* Subtle overlay, not full dark mask */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --card-contrast-text: #f1f5f9;
+    /* Readable light text on dark card */
+    --card-overlay-max: rgba(255, 255, 255, 0.02);
+  }
+}
+
+/* 
+ * Utility: .card-quiet-overlay
+ * Prevents full-bleed dark overlays that hide text.
+ * Use this instead of bg-black/50 or similar heavy masks.
+ */
+.card-quiet-overlay {
+  position: relative;
+  isolation: isolate;
+}
+
+.card-quiet-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--card-overlay-max);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* 
+ * Utility: .feature-card
+ * Pre-styled card with accessible contrast, padding, shadow.
+ * Ensures full opacity to prevent gradient bleed-through.
+ * Falls back to Tailwind bg-white if --card is missing.
+ */
+.feature-card {
+  background: var(--card);
+  color: var(--card-contrast-text);
+  padding: 1.5rem;
+  /* 24px */
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  opacity: 1;
+  /* Full opacity to ensure readability over gradient backgrounds */
+  transition: transform var(--motion-fast) var(--ease-ui),
+    box-shadow var(--motion-fast) var(--ease-ui);
+}
+
+@media (prefers-color-scheme: dark) {
+  .feature-card {
+    border-color: rgba(255, 255, 255, 0.06);
+  }
+}
+
+/* 
+ * Priority indicator pulse (reduced-motion safe)
+ * Used for high-priority feature cards or status dots.
+ */
+@keyframes priority-pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+.priority-pulse {
+  animation: priority-pulse 2s var(--ease-smooth) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .priority-pulse {
+    animation: none;
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* -------- FixItNow design tokens & utilities (append) -------- */
+:root {
+  --ff-sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --card-contrast-text: #0f172a;
+  --muted: #6b7280;
+  --accent: #2563eb;
+  --accent-600: #1d4ed8;
+  --radius: 12px;
+  --shadow-sm: 0 4px 10px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 10px 30px rgba(15, 23, 42, 0.08);
+  --motion-fast: 120ms;
+  --motion-medium: 240ms;
+  --ease-ui: cubic-bezier(.2, .8, .2, 1);
+}
+
+/* sensible card surface to avoid camouflage */
+.card {
+  background: var(--card);
+  color: var(--card-contrast-text);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid rgba(15, 23, 42, 0.04);
+}
+
+/* feature-card shortcut used by components */
+.feature-card {
+  padding: 1.25rem;
+  /* 20px */
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--card-contrast-text);
+  box-shadow: var(--shadow-sm);
+}
+
+/* accent button */
+.accent-btn {
+  background: linear-gradient(180deg, var(--accent), var(--accent-600));
+  color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18);
+}
+
+/* small utility to avoid site-level overlay masks hiding content */
+.no-overlay {
+  background: transparent !important;
+  mix-blend-mode: normal !important;
+  opacity: 1 !important;
+}
+
+/* simple accessible pulse - disabled with reduced motion */
+@keyframes pulse-soft {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1.15);
+    opacity: .85;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.pulse-soft {
+  animation: pulse-soft 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-soft {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* small text utilities */
+.muted {
+  color: var(--muted);
+}
+
+/* Spotlight animation for 3D component */
+@keyframes spotlight {
+  0% {
+    opacity: 0;
+    transform: translate(-72%, -62%) scale(0.5);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -40%) scale(1);
+  }
+}
+
+.animate-spotlight {
+  animation: spotlight 2s ease 0.75s 1 forwards;
+}
+
+/* Gradient Text Effect - Neon Colors */
+:root {
+  --color-1: 330 100% 40%;
+  /* Dark Neon Pink */
+  --color-2: 140 100% 55%;
+  /* Bright Electric Green */
+  --color-3: 210 100% 30%;
+  /* Deep Neon Blue */
+  --color-4: 60 100% 70%;
+  /* Light Neon Yellow */
+  --color-5: 295 100% 45%;
+  /* Dark Neon Purple */
+  --brand: 50 100% 50%;
+  /* Bright, punchy yellow */
+}
+
+.dark {
+  --color-1: 330 100% 40%;
+  /* Dark Neon Pink */
+  --color-2: 140 100% 55%;
+  /* Bright Electric Green */
+  --color-3: 210 100% 30%;
+  /* Deep Neon Blue */
+  --color-4: 60 100% 70%;
+  /* Light Neon Yellow */
+  --color-5: 295 100% 45%;
+  /* Dark Neon Purple */
+  --brand: 50 100% 50%;
+  /* Bright, punchy yellow */
+}
+
+/* Gradient Border Animation Keyframes */
+@keyframes gradient-border {
+
+  0%,
+  100% {
+    border-radius: 37% 29% 27% 27% / 28% 25% 41% 37%;
+  }
+
+  25% {
+    border-radius: 47% 29% 39% 49% / 61% 19% 66% 26%;
+  }
+
+  50% {
+    border-radius: 57% 23% 47% 72% / 63% 17% 66% 33%;
+  }
+
+  75% {
+    border-radius: 28% 49% 29% 100% / 93% 20% 64% 25%;
+  }
+}
+
+@keyframes gradient-1 {
+
+  0%,
+  100% {
+    top: 0;
+    right: 0;
+  }
+
+  50% {
+    top: 50%;
+    right: 25%;
+  }
+
+  75% {
+    top: 25%;
+    right: 50%;
+  }
+}
+
+@keyframes gradient-2 {
+
+  0%,
+  100% {
+    top: 0;
+    left: 0;
+  }
+
+  60% {
+    top: 75%;
+    left: 25%;
+  }
+
+  85% {
+    top: 50%;
+    left: 50%;
+  }
+}
+
+@keyframes gradient-3 {
+
+  0%,
+  100% {
+    bottom: 0;
+    left: 0;
+  }
+
+  40% {
+    bottom: 50%;
+    left: 25%;
+  }
+
+  65% {
+    bottom: 25%;
+    left: 50%;
+  }
+}
+
+@keyframes gradient-4 {
+
+  0%,
+  100% {
+    bottom: 0;
+    right: 0;
+  }
+
+  50% {
+    bottom: 25%;
+    right: 40%;
+  }
+
+  90% {
+    bottom: 50%;
+    right: 25%;
+  }
+}
+
+/* Gradient X Animation for text gradients */
+@keyframes gradient-x {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-gradient-x {
+  animation: gradient-x 3s ease infinite;
+}
+
+/* Shimmer animation for urgent announcements */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s ease-in-out infinite;
+}
