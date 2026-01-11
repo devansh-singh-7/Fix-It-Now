@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTechnicianPerformance } from '@/app/lib/analytics';
 
-/**
- * GET /api/analytics/technicians
- * 
- * Returns technician performance metrics for a building
- */
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);

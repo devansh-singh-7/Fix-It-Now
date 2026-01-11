@@ -1,18 +1,7 @@
-/**
- * Database Client
- * 
- * This file provides all database operations using MongoDB.
- * Firebase is ONLY used for authentication.
- * All data storage uses MongoDB.
- * 
- * NOTE: This file should ONLY be imported in server-side code (API routes, server components).
- * For client components, import types from './types' instead.
- */
 
 import { getDatabase, getMongoClient } from './mongodb';
 import { Filter, UpdateFilter, Document, ClientSession } from 'mongodb';
 
-// Re-export all types from types.ts
 export type {
   UserRole,
   UserProfile,

@@ -1,5 +1,5 @@
 import * as mobilenet from '@tensorflow-models/mobilenet';
-import '@tensorflow/tfjs';
+import * as tf from '@tensorflow/tfjs';
 
 export type AppCategory =
   | 'plumbing'
@@ -134,23 +134,25 @@ class AIClassifier {
 
     // Load the model
     // version 2, alpha 1.0 is a good balance of speed/accuracy for browser
-    this.loadPromise = mobilenet
-      .load({
-        version: 2,
-        alpha: 1.0,
-      })
-      .then((model) => {
+    this.loadPromise = (async () => {
+      try {
+        await tf.ready();
+        const model = await mobilenet.load({
+          version: 2,
+          alpha: 1.0,
+        });
+        
         this.model = model;
         this.isLoading = false;
         console.log('MobileNet model loaded successfully');
         return model;
-      })
-      .catch((err) => {
+      } catch (err) {
         this.isLoading = false;
         this.loadPromise = null;
         console.error('Failed to load MobileNet model:', err);
         throw err;
-      });
+      }
+    })();
 
     return this.loadPromise;
   }
