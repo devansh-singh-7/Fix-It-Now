@@ -43,6 +43,12 @@ export default function JoinBuildingBanner({ onJoinSuccess }: JoinBuildingBanner
 
       const profile = JSON.parse(userProfile);
 
+      console.log('[JoinBuildingBanner] Updating building for user:', {
+        uid: profile.firebaseUid || profile.uid,
+        buildingId: validateData.data.id,
+        buildingName: validateData.data.name
+      });
+
       // Update user profile with building ID
       const updateRes = await fetch('/api/users/update-building', {
         method: 'POST',
@@ -55,9 +61,11 @@ export default function JoinBuildingBanner({ onJoinSuccess }: JoinBuildingBanner
       });
 
       const updateData = await updateRes.json();
+      console.log('[JoinBuildingBanner] API response:', updateData);
 
       if (!updateData.success) {
-        setError('Failed to join building. Please try again.');
+        console.error('[JoinBuildingBanner] Failed to update building:', updateData);
+        setError(updateData.error || 'Failed to join building. Please try again.');
         setLoading(false);
         return;
       }
@@ -72,6 +80,9 @@ export default function JoinBuildingBanner({ onJoinSuccess }: JoinBuildingBanner
         firebaseUid: profile.firebaseUid || profile.uid
       };
       localStorage.setItem('userProfile', JSON.stringify(updatedProfile));
+      
+      // Dispatch custom event to notify NavBar (storage events don't fire in same tab)
+      window.dispatchEvent(new CustomEvent('userProfileUpdated'));
       
       console.log('✅ Building joined successfully:', {
         buildingId: validateData.data.id,

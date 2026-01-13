@@ -25,6 +25,16 @@ interface Technician {
   isActive: boolean;
 }
 
+interface AvailableTechnician {
+  uid: string;
+  name: string;
+  email: string;
+  phoneNumber?: string;
+  currentBuilding: string | null;
+  isUnassigned: boolean;
+  isPending: boolean;
+}
+
 export default function BuildingManagementPage() {
   const shouldReduceMotion = useReducedMotion();
 
@@ -49,6 +59,12 @@ export default function BuildingManagementPage() {
   const [techPhone, setTechPhone] = useState("");
   const [addingTech, setAddingTech] = useState(false);
   const [buildingTechnicians, setBuildingTechnicians] = useState<Record<string, Technician[]>>({});
+  
+  // New: State for selecting from existing technicians
+  const [assignMode, setAssignMode] = useState<'existing' | 'new'>('existing');
+  const [availableTechnicians, setAvailableTechnicians] = useState<AvailableTechnician[]>([]);
+  const [loadingAvailable, setLoadingAvailable] = useState(false);
+  const [selectedExistingTech, setSelectedExistingTech] = useState<string | null>(null);
 
   // Load all buildings for this admin
   useEffect(() => {
@@ -198,6 +214,8 @@ export default function BuildingManagementPage() {
     setTechEmail("");
     setTechPhone("");
     setError("");
+    setAssignMode('existing');
+    setSelectedExistingTech(null);
     
     // Load existing technicians for this building
     if (!buildingTechnicians[buildingId]) {
@@ -213,26 +231,52 @@ export default function BuildingManagementPage() {
         console.error('Error loading technicians:', err);
       }
     }
+
+    // Load available technicians from all buildings
+    setLoadingAvailable(true);
+    try {
+      const res = await fetch(`/api/technicians/available?excludeBuildingId=${buildingId}`, {
+        headers: { 'x-user-id': auth?.currentUser?.uid || '' },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAvailableTechnicians(data.data);
+      }
+    } catch (err) {
+      console.error('Error loading available technicians:', err);
+    } finally {
+      setLoadingAvailable(false);
+    }
   };
 
   const handleAssignTechnician = async () => {
-    if (!selectedBuildingId || !techName || !techEmail || !auth?.currentUser) return;
+    if (!selectedBuildingId || !auth?.currentUser) return;
+    
+    // Validate based on mode
+    if (assignMode === 'existing' && !selectedExistingTech) {
+      setError('Please select a technician from the list');
+      return;
+    }
+    if (assignMode === 'new' && (!techName || !techEmail)) {
+      setError('Please fill in the technician name and email');
+      return;
+    }
     
     setAddingTech(true);
     setError("");
 
     try {
+      const requestBody = assignMode === 'existing'
+        ? { technicianUid: selectedExistingTech }
+        : { name: techName, email: techEmail, phoneNumber: techPhone || undefined };
+
       const response = await fetch(`/api/buildings/${selectedBuildingId}/technicians`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-user-id': auth.currentUser.uid,
         },
-        body: JSON.stringify({
-          name: techName,
-          email: techEmail,
-          phoneNumber: techPhone || undefined,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const result = await response.json();
@@ -250,10 +294,14 @@ export default function BuildingManagementPage() {
         setBuildingTechnicians(prev => ({ ...prev, [selectedBuildingId]: techData.data }));
       }
 
-      setSuccess(`Technician "${techName}" has been assigned to ${selectedBuildingName}`);
+      const successName = assignMode === 'existing' 
+        ? availableTechnicians.find(t => t.uid === selectedExistingTech)?.name || 'Technician'
+        : techName;
+      setSuccess(`Technician "${successName}" has been assigned to ${selectedBuildingName}`);
       setTechName("");
       setTechEmail("");
       setTechPhone("");
+      setSelectedExistingTech(null);
       setShowTechModal(false);
       setTimeout(() => setSuccess(""), 3000);
     } catch (err) {
@@ -604,7 +652,7 @@ export default function BuildingManagementPage() {
             
             {/* Modal Body */}
             <div className="p-6 space-y-6">
-              {/* Existing Technicians */}
+              {/* Current Technicians in this Building */}
               {selectedBuildingId && buildingTechnicians[selectedBuildingId]?.length > 0 && (
                 <div>
                   <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Current Technicians</h3>
@@ -625,43 +673,143 @@ export default function BuildingManagementPage() {
                   </div>
                 </div>
               )}
+
+              {/* Error Message */}
+              {error && (
+                <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50">
+                  <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+                </div>
+              )}
               
+              {/* Mode Tabs */}
+              <div className="flex border-b border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={() => setAssignMode('existing')}
+                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                    assignMode === 'existing'
+                      ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  Select Existing
+                </button>
+                <button
+                  onClick={() => setAssignMode('new')}
+                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                    assignMode === 'new'
+                      ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  Add New
+                </button>
+              </div>
+
+              {/* Existing Technicians Selection */}
+              {assignMode === 'existing' && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                    Available Technicians
+                  </h3>
+                  {loadingAvailable ? (
+                    <div className="flex items-center justify-center py-8">
+                      <svg className="animate-spin h-6 w-6 text-blue-500" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                    </div>
+                  ) : availableTechnicians.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                      <svg className="w-12 h-12 mx-auto mb-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                      <p className="font-medium">No technicians available</p>
+                      <p className="text-sm mt-1">Add a new technician using the &quot;Add New&quot; tab</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {availableTechnicians.map((tech) => (
+                        <button
+                          key={tech.uid}
+                          onClick={() => setSelectedExistingTech(tech.uid)}
+                          className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all ${
+                            selectedExistingTech === tech.uid
+                              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                              : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'
+                          }`}
+                        >
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                            selectedExistingTech === tech.uid
+                              ? 'bg-blue-100 dark:bg-blue-900/50'
+                              : 'bg-gray-100 dark:bg-gray-800'
+                          }`}>
+                            <svg className={`w-4 h-4 ${
+                              selectedExistingTech === tech.uid
+                                ? 'text-blue-600 dark:text-blue-400'
+                                : 'text-gray-500 dark:text-gray-400'
+                            }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1 text-left">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">{tech.name}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{tech.email}</p>
+                            {tech.currentBuilding && (
+                              <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                                Currently at: {tech.currentBuilding}
+                              </p>
+                            )}
+                          </div>
+                          {selectedExistingTech === tech.uid && (
+                            <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Add New Technician Form */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Add New Technician</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Name *</label>
-                    <input
-                      type="text"
-                      value={techName}
-                      onChange={(e) => setTechName(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="John Doe"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Email *</label>
-                    <input
-                      type="email"
-                      value={techEmail}
-                      onChange={(e) => setTechEmail(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="technician@email.com"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Phone (Optional)</label>
-                    <input
-                      type="tel"
-                      value={techPhone}
-                      onChange={(e) => setTechPhone(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="+91 98765 43210"
-                    />
+              {assignMode === 'new' && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Add New Technician</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Name *</label>
+                      <input
+                        type="text"
+                        value={techName}
+                        onChange={(e) => setTechName(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="John Doe"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Email *</label>
+                      <input
+                        type="email"
+                        value={techEmail}
+                        onChange={(e) => setTechEmail(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="technician@email.com"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Phone (Optional)</label>
+                      <input
+                        type="tel"
+                        value={techPhone}
+                        onChange={(e) => setTechPhone(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="+91 98765 43210"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
             
             {/* Modal Footer */}
@@ -674,7 +822,7 @@ export default function BuildingManagementPage() {
               </button>
               <button
                 onClick={handleAssignTechnician}
-                disabled={addingTech || !techName || !techEmail}
+                disabled={addingTech || (assignMode === 'existing' ? !selectedExistingTech : (!techName || !techEmail))}
                 className="px-6 py-2 text-sm font-medium bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {addingTech ? (
@@ -686,7 +834,7 @@ export default function BuildingManagementPage() {
                     Assigning...
                   </>
                 ) : (
-                  <>Assign Technician</>
+                  <>{assignMode === 'existing' ? 'Assign Selected' : 'Add Technician'}</>
                 )}
               </button>
             </div>

@@ -7,7 +7,9 @@ import { auth } from '../lib/firebase-app';
 import type { UserProfile } from '../lib/types';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ImageUpload } from './ui/image-upload';
-import { aiClassifier } from '../lib/ai-classifier';
+// AI classifier is dynamically imported when needed to avoid loading TensorFlow at compile time
+import PhoneInput from 'react-phone-number-input';
+import 'react-phone-number-input/style.css';
 
 interface CreateTicketFormProps {
   isOpen: boolean;
@@ -200,8 +202,8 @@ export default function CreateTicketForm({ isOpen, onClose, onSuccess }: CreateT
       const result = await response.json();
 
       if (!result.success) {
-        console.error('API error:', result);
-        throw new Error(result.details || result.error || 'Failed to create ticket');
+        console.error('API error response:', JSON.stringify(result, null, 2));
+        throw new Error(result.error || (result.details ? JSON.stringify(result.details) : 'Failed to create ticket'));
       }
 
       console.log('✅ Ticket created successfully:', result.data?.id);
@@ -302,6 +304,7 @@ export default function CreateTicketForm({ isOpen, onClose, onSuccess }: CreateT
                     </label>
                     <textarea
                       required
+                      minLength={10}
                       value={formData.description}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                       rows={4}
@@ -309,8 +312,8 @@ export default function CreateTicketForm({ isOpen, onClose, onSuccess }: CreateT
                       placeholder="Provide detailed information about the issue, including when it started and any relevant details..."
                       maxLength={500}
                     />
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      {formData.description.length}/500 characters
+                    <p className={`mt-1 text-xs ${formData.description.length > 0 && formData.description.length < 10 ? 'text-amber-500 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                      {formData.description.length}/500 characters {formData.description.length > 0 && formData.description.length < 10 && `(minimum 10 required)`}
                     </p>
                   </div>
 
@@ -367,17 +370,108 @@ export default function CreateTicketForm({ isOpen, onClose, onSuccess }: CreateT
                     <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                       Contact Phone
                     </label>
-                    <input
-                      type="tel"
-                      value={formData.contactPhone}
-                      onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
-                      className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="+1 (555) 000-0000"
-                    />
+                    <div className="ticket-phone-input-container">
+                      <PhoneInput
+                        placeholder="Enter phone number"
+                        value={formData.contactPhone}
+                        onChange={(value) => setFormData({ ...formData, contactPhone: value || '' })}
+                        defaultCountry="US"
+                        className="w-full"
+                      />
+                    </div>
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                       Location will be set from your building:{' '}
                       {userProfile?.buildingName || 'Not assigned'}
                     </p>
+                    <style jsx global>{`
+                      .ticket-phone-input-container .PhoneInput {
+                        display: flex !important;
+                        flex-direction: row !important;
+                        align-items: center !important;
+                        background-color: white;
+                        border: 1px solid #d1d5db;
+                        border-radius: 0.5rem;
+                        padding: 0.625rem 1rem;
+                        transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+                        width: 100%;
+                      }
+                      .ticket-phone-input-container .PhoneInput:focus-within {
+                        border-color: #3b82f6;
+                        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+                        outline: none;
+                      }
+                      .dark .ticket-phone-input-container .PhoneInput {
+                        background-color: #1f2937;
+                        border-color: #374151;
+                        color: white;
+                      }
+                      
+                      .ticket-phone-input-container .PhoneInputCountry {
+                        display: flex !important;
+                        align-items: center !important;
+                        margin-right: 0.75rem;
+                        flex-shrink: 0;
+                        order: -1;
+                      }
+                      
+                      .ticket-phone-input-container .PhoneInputInput {
+                        background: transparent !important;
+                        outline: none !important;
+                        border: none !important;
+                        padding: 0 !important;
+                        color: #111827;
+                        flex: 1 1 auto !important;
+                        min-width: 0;
+                        width: 100% !important;
+                        font-size: 1rem;
+                      }
+                      .dark .ticket-phone-input-container .PhoneInputInput {
+                        color: white;
+                      }
+                      .ticket-phone-input-container .PhoneInputInput::placeholder {
+                        color: #9ca3af;
+                      }
+                      
+                      .ticket-phone-input-container .PhoneInputCountryIcon {
+                        width: 1.5rem;
+                        height: 1rem;
+                        box-shadow: 0 0 0 1px rgba(0,0,0,0.1);
+                        border-radius: 2px;
+                        flex-shrink: 0;
+                      }
+                      .dark .ticket-phone-input-container .PhoneInputCountryIcon {
+                        box-shadow: 0 0 0 1px rgba(255,255,255,0.2);
+                      }
+
+                      .ticket-phone-input-container .PhoneInputCountrySelect {
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        height: 100%;
+                        width: 100%;
+                        z-index: 1;
+                        border: 0;
+                        opacity: 0;
+                        cursor: pointer;
+                      }
+                      
+                      .ticket-phone-input-container .PhoneInputCountrySelectArrow {
+                        display: block;
+                        margin-left: 0.35rem;
+                        width: 0.35rem;
+                        height: 0.35rem;
+                        border-style: solid;
+                        border-color: #6b7280;
+                        border-top-width: 0;
+                        border-bottom-width: 1.5px;
+                        border-left-width: 0;
+                        border-right-width: 1.5px;
+                        transform: rotate(45deg);
+                      }
+                      .dark .ticket-phone-input-container .PhoneInputCountrySelectArrow {
+                        border-color: #9ca3af;
+                      }
+                    `}</style>
                   </div>
 
                   {/* Image Upload */}
@@ -396,6 +490,8 @@ export default function CreateTicketForm({ isOpen, onClose, onSuccess }: CreateT
                         if (files.length > 0 && !formData.category) {
                           setIsClassifying(true);
                           try {
+                            // Dynamically import TensorFlow/ai-classifier only when needed
+                            const { aiClassifier } = await import('../lib/ai-classifier');
                             const result = await aiClassifier.classifyFile(files[0]);
                             if (result && result.category !== 'other') {
                               setFormData((prev) => ({ ...prev, category: result.category }));

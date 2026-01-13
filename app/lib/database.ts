@@ -173,12 +173,14 @@ export async function updateUserBuilding(
   uid: string,
   buildingId: string,
   buildingName: string
-): Promise<void> {
+): Promise<{ matchedCount: number; modifiedCount: number }> {
   try {
     const db = await getDatabase();
     const now = new Date();
 
-    await db.collection('users').updateOne(
+    console.log('[updateUserBuilding] Updating user building:', { uid, buildingId, buildingName });
+
+    const result = await db.collection('users').updateOne(
       { firebaseUid: uid },
       {
         $set: {
@@ -188,6 +190,18 @@ export async function updateUserBuilding(
         },
       }
     );
+
+    console.log('[updateUserBuilding] Update result:', {
+      matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount,
+      acknowledged: result.acknowledged
+    });
+
+    if (result.matchedCount === 0) {
+      console.warn('[updateUserBuilding] No user found with firebaseUid:', uid);
+    }
+
+    return { matchedCount: result.matchedCount, modifiedCount: result.modifiedCount };
   } catch (error) {
     console.error('Error updating user building:', error);
     throw error;
@@ -344,11 +358,35 @@ export async function createBuilding(
 
 /**
  * Get building by ID
+ * Tries both custom 'id' field and MongoDB '_id' field
  */
 export async function getBuilding(buildingId: string): Promise<Building | null> {
   try {
     const db = await getDatabase();
-    const building = await db.collection('buildings').findOne({ id: buildingId });
+    
+    console.log('[getBuilding] Looking for building with id:', buildingId);
+    
+    // First try the custom id field
+    let building = await db.collection('buildings').findOne({ id: buildingId });
+    
+    // If not found, try with _id (for MongoDB ObjectId)
+    if (!building) {
+      console.log('[getBuilding] Not found by id, trying _id field');
+      try {
+        const { ObjectId } = await import('mongodb');
+        if (ObjectId.isValid(buildingId)) {
+          building = await db.collection('buildings').findOne({ _id: new ObjectId(buildingId) });
+        }
+      } catch {
+        // ObjectId parsing failed, ignore
+      }
+    }
+
+    if (building) {
+      console.log('[getBuilding] Found building:', building.name);
+    } else {
+      console.log('[getBuilding] Building not found for id:', buildingId);
+    }
 
     return building as Building | null;
   } catch (error) {
@@ -587,7 +625,20 @@ export async function getTechniciansForBuilding(
       })
       .toArray();
 
-    return technicians as unknown as UserProfile[];
+    // Map MongoDB documents to UserProfile, ensuring uid is set from firebaseUid
+    return technicians.map(tech => ({
+      uid: tech.firebaseUid || tech.uid || `pending_${tech.email}`,
+      name: tech.name || tech.displayName,
+      email: tech.email,
+      phoneNumber: tech.phoneNumber,
+      role: tech.role,
+      buildingId: tech.buildingId,
+      buildingName: tech.buildingName,
+      isActive: tech.isActive ?? true,
+      isPending: tech.isPending ?? false,
+      createdAt: tech.createdAt,
+      updatedAt: tech.updatedAt,
+    })) as UserProfile[];
   } catch (error) {
     console.error('Error fetching technicians:', error);
     return [];

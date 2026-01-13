@@ -35,7 +35,8 @@ export async function GET(
         return NextResponse.json({
             success: true,
             data: technicians.map(tech => ({
-                uid: tech.uid,
+                // Use firebaseUid if available, otherwise generate from MongoDB _id or email
+                uid: tech.uid || (tech as unknown as { firebaseUid?: string }).firebaseUid || `pending_${tech.email}`,
                 name: tech.name,
                 email: tech.email,
                 phoneNumber: tech.phoneNumber,
@@ -119,16 +120,35 @@ export async function POST(
                 message: 'Technician assigned to building'
             });
         } else if (name && email) {
+            // Check if a technician with this email already exists for this building
+            const existingTech = await db.collection('users').findOne({
+                email: email.toLowerCase(),
+                buildingId: id,
+                role: 'technician'
+            });
+
+            if (existingTech) {
+                return NextResponse.json(
+                    { success: false, error: 'A technician with this email already exists for this building' },
+                    { status: 400 }
+                );
+            }
+
             // Create a new technician profile (they'll need to sign up to complete)
+            // Generate a temporary ID that will be replaced when they claim their account
+            const tempUid = `pending_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            
             const newTechnician = {
+                firebaseUid: tempUid, // Temporary ID until they sign up
                 name,
-                email,
+                email: email.toLowerCase(),
                 phoneNumber: phoneNumber || null,
                 role: 'technician',
                 buildingId: id,
                 buildingName: building.name,
                 isActive: true,
                 awaitApproval: true, // Pending until they sign up
+                isPending: true, // Flag to indicate they haven't claimed their account
                 createdAt: new Date(),
                 updatedAt: new Date()
             };
@@ -137,7 +157,7 @@ export async function POST(
 
             return NextResponse.json({
                 success: true,
-                message: 'Technician profile created'
+                message: 'Technician profile created. They will need to sign up with this email to access their account.'
             });
         } else {
             return NextResponse.json(

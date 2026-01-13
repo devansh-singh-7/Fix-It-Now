@@ -10,6 +10,8 @@ interface UserProfile {
   phoneNumber?: string;
   role: string;
   firebaseUid: string;
+  buildingId?: string;
+  buildingName?: string;
   subscriptionPlan?: SubscriptionPlan;
   subscriptionTier?: SubscriptionTier;
 }
@@ -23,13 +25,45 @@ const PLAN_INFO: Record<SubscriptionPlan, { name: string; color: string; tierLab
 
 export default function ProfilePage() {
   const router = useRouter();
-  const [profile] = useState<UserProfile | null>(() => {
+  const [profile, setProfile] = useState<UserProfile | null>(() => {
     if (typeof window !== 'undefined') {
       const userProfile = localStorage.getItem('userProfile');
       return userProfile ? JSON.parse(userProfile) : null;
     }
     return null;
   });
+
+  // Re-read profile from localStorage when it updates
+  useEffect(() => {
+    const readProfile = () => {
+      if (typeof window !== 'undefined') {
+        const userProfile = localStorage.getItem('userProfile');
+        if (userProfile) {
+          setProfile(JSON.parse(userProfile));
+        }
+      }
+    };
+
+    // Listen for storage changes (cross-tab)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'userProfile') {
+        readProfile();
+      }
+    };
+
+    // Listen for custom event (same tab)
+    const handleProfileUpdate = () => {
+      readProfile();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('userProfileUpdated', handleProfileUpdate);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('userProfileUpdated', handleProfileUpdate);
+    };
+  }, []);
 
   useEffect(() => {
     if (!profile) {
@@ -50,6 +84,22 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 py-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Back to Dashboard Button */}
+        <button
+          onClick={() => router.push('/dashboard')}
+          className="group inline-flex items-center gap-2 mb-6 px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+        >
+          <svg 
+            className="w-5 h-5 group-hover:-translate-x-1 transition-transform" 
+            fill="none" 
+            viewBox="0 0 24 24" 
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Back to Dashboard
+        </button>
+
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Profile</h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">View your profile information</p>
@@ -101,6 +151,38 @@ export default function ProfilePage() {
                 <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 capitalize">
                   {profile.role}
                 </span>
+              </div>
+
+              {/* Building Information */}
+              <div className="border-t border-gray-200 dark:border-gray-800 pt-6">
+                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Building</h3>
+                {profile.buildingName ? (
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
+                      <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-lg font-medium text-gray-900 dark:text-white">{profile.buildingName}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Building ID: {profile.buildingId}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
+                      <svg className="w-5 h-5 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-gray-600 dark:text-gray-400">No building assigned</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-500">
+                        Use a building join code to join your building from the dashboard.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Subscription Section */}

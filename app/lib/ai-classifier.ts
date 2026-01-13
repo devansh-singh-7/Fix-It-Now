@@ -138,6 +138,17 @@ class AIClassifier {
     // version 2, alpha 1.0 is a good balance of speed/accuracy for browser
     this.loadPromise = (async () => {
       try {
+        // Ensure a backend is initialized
+        if (!tf.getBackend()) {
+          console.log('No backend detected, attempting to set WebGL...');
+          try {
+            await tf.setBackend('webgl');
+          } catch (e) {
+            console.warn('WebGL failed, falling back to CPU', e);
+            await tf.setBackend('cpu');
+          }
+        }
+        
         await tf.ready();
         const model = await mobilenet.load({
           version: 2,

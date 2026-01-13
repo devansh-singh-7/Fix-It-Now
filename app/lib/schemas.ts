@@ -4,8 +4,19 @@ import { z } from "zod";
 export const createTicketSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters").max(100, "Title must be less than 100 characters"),
   description: z.string().min(10, "Description must be at least 10 characters").max(2000, "Description must be less than 2000 characters"),
-  category: z.enum(['plumbing', 'electrical', 'hvac', 'cleaning', 'other'], {
-    message: "Category must be one of: plumbing, electrical, hvac, cleaning, other"
+  category: z.enum([
+    'plumbing',
+    'electrical',
+    'hvac',
+    'cleaning',
+    'carpentry',
+    'appliance',
+    'painting',
+    'landscaping',
+    'security',
+    'other'
+  ], {
+    message: "Category must be one of the supported types"
   }),
   priority: z.enum(['low', 'medium', 'high', 'urgent'], {
     message: "Priority must be one of: low, medium, high, urgent"

@@ -53,6 +53,12 @@ export interface UserProfile {
   // Subscription info
   subscriptionPlan?: SubscriptionPlan;  // BASIC, PRO, or ENTERPRISE
   subscriptionTier?: SubscriptionTier;  // 1=Enterprise, 2=Pro, 3=Basic
+  subscriptionBillingCycle?: 'monthly' | 'yearly';
+  subscriptionStartDate?: Date;
+  // Stripe-specific fields
+  stripeCustomerId?: string;      // Stripe customer ID
+  subscriptionId?: string;        // Active Stripe subscription ID
+  subscriptionStatus?: 'active' | 'canceled' | 'past_due' | 'trialing' | 'incomplete';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -60,7 +66,17 @@ export interface UserProfile {
 /**
  * Ticket category
  */
-export type TicketCategory = 'plumbing' | 'electrical' | 'hvac' | 'cleaning' | 'other';
+export type TicketCategory =
+  | 'plumbing'
+  | 'electrical'
+  | 'hvac'
+  | 'cleaning'
+  | 'carpentry'
+  | 'appliance'
+  | 'painting'
+  | 'landscaping'
+  | 'security'
+  | 'other';
 
 /**
  * Ticket priority levels

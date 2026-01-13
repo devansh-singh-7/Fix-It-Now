@@ -300,30 +300,46 @@ export function Pricing({
         setLoadingPlan(plan.name);
 
         try {
-            // Create order on backend
-            const response = await fetch("/api/payments/create-order", {
+            // Get user info from localStorage if logged in
+            let userId: string | undefined;
+            let userEmail: string | undefined;
+            if (typeof window !== 'undefined') {
+                const userProfile = localStorage.getItem('userProfile');
+                if (userProfile) {
+                    const profile = JSON.parse(userProfile);
+                    userId = profile.uid || profile.firebaseUid;
+                    userEmail = profile.email;
+                }
+            }
+
+            // Create Stripe Checkout session
+            const response = await fetch("/api/payments/create-checkout-session", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     planName: plan.name,
                     isYearly: !isMonthly,
+                    userId,
+                    userEmail,
                 }),
             });
 
             if (!response.ok) {
-                throw new Error("Failed to create order");
+                const errorData = await response.json();
+                throw new Error(errorData.error || "Failed to create checkout session");
             }
 
             const data = await response.json();
 
-            // Store order data and show payment modal
-            setSelectedPlan(plan);
-            setOrderData(data);
-            setShowPaymentModal(true);
+            // Redirect to Stripe Checkout
+            if (data.url) {
+                window.location.href = data.url;
+            } else {
+                throw new Error("No checkout URL returned");
+            }
         } catch (error) {
             console.error("Payment error:", error);
             alert("Failed to initiate payment. Please try again.");
-        } finally {
             setLoadingPlan(null);
         }
     }, [isMonthly, router]);

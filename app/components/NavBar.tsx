@@ -134,34 +134,65 @@ export default function NavBar() {
   useEffect(() => {
     setMounted(true);
     
-    // Immediately check localStorage for auth state as fallback
-    // Firebase auth state can be slow to restore on page load
-    if (typeof window !== 'undefined') {
-      const authToken = localStorage.getItem('authToken');
-      const userProfile = localStorage.getItem('userProfile');
-      
-      if (authToken && userProfile) {
-        try {
-          const profile = JSON.parse(userProfile);
-          // Create a minimal user-like object for display purposes
-          // This will be replaced by real Firebase user when auth state fires
-          setUser({
-            displayName: profile.displayName || profile.name,
-            email: profile.email,
-            uid: profile.firebaseUid || profile.uid,
-          } as unknown as User);
-          setUserRole(profile.role || 'resident');
-          
-          if (profile.role !== 'admin' && !profile.buildingId) {
-            setHasBuilding(false);
-          } else {
-            setHasBuilding(true);
+    // Function to read and apply profile from localStorage
+    const readProfileFromStorage = () => {
+      if (typeof window !== 'undefined') {
+        const authToken = localStorage.getItem('authToken');
+        const userProfile = localStorage.getItem('userProfile');
+        
+        if (authToken && userProfile) {
+          try {
+            const profile = JSON.parse(userProfile);
+            // Create a minimal user-like object for display purposes
+            // This will be replaced by real Firebase user when auth state fires
+            setUser({
+              displayName: profile.displayName || profile.name,
+              email: profile.email,
+              uid: profile.firebaseUid || profile.uid,
+            } as unknown as User);
+            setUserRole(profile.role || 'resident');
+            
+            // Check building status - buildingId can be string or object
+            const extractedBuildingId = typeof profile.buildingId === 'object'
+              ? profile.buildingId?.buildingId || profile.buildingId
+              : profile.buildingId;
+            
+            if (profile.role !== 'admin' && !extractedBuildingId) {
+              setHasBuilding(false);
+            } else {
+              setHasBuilding(true);
+            }
+          } catch (error) {
+            console.error('Error parsing stored user profile:', error);
           }
-        } catch (error) {
-          console.error('Error parsing stored user profile:', error);
         }
       }
-    }
+    };
+
+    // Initial read
+    readProfileFromStorage();
+
+    // Listen for storage changes (when localStorage is updated in same or another tab)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'userProfile') {
+        console.log('NavBar: userProfile updated in localStorage - re-reading');
+        readProfileFromStorage();
+      }
+    };
+
+    // Listen for custom event when profile is updated in the same tab
+    const handleProfileUpdate = () => {
+      console.log('NavBar: profile update event received');
+      readProfileFromStorage();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('userProfileUpdated', handleProfileUpdate);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('userProfileUpdated', handleProfileUpdate);
+    };
   }, []);
 
   useEffect(() => {
@@ -181,7 +212,12 @@ export default function NavBar() {
                   setUserRole(profile.role || 'resident');
 
                   // Check if user has a building assigned (except for admins who might not need one initially)
-                  if (profile.role !== 'admin' && !profile.buildingId) {
+                  // Handle buildingId being either a string or object
+                  const extractedBuildingId = typeof profile.buildingId === 'object'
+                    ? profile.buildingId?.buildingId || profile.buildingId
+                    : profile.buildingId;
+                  
+                  if (profile.role !== 'admin' && !extractedBuildingId) {
                     setHasBuilding(false);
                   } else {
                     setHasBuilding(true);
