@@ -113,7 +113,7 @@ export async function GET(request: Request) {
             },
             {
               $project: {
-                id: 1,
+                id: { $ifNull: ["$id", { $toString: "$_id" }] },
                 title: 1,
                 description: 1,
                 status: 1,

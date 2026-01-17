@@ -34,6 +34,10 @@ import {
 import TicketTimeline from "@/app/components/TicketTimeline";
 import CreateTicketForm from "@/app/components/CreateTicketForm";
 import NavBar from "@/app/components/NavBar";
+import { 
+  normalizeTickets, 
+  type NormalizedTicket
+} from "@/app/lib/ticketUtils";
 
 export default function TicketsPage() {
   const router = useRouter();
@@ -45,8 +49,8 @@ export default function TicketsPage() {
   const [userName, setUserName] = useState<string>("");
   const [buildingId, setBuildingId] = useState<string | null>(null);
 
-  // Tickets state
-  const [tickets, setTickets] = useState<Ticket[]>([]);
+  // Tickets state - using normalized tickets for consistent UI display
+  const [tickets, setTickets] = useState<NormalizedTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -54,12 +58,12 @@ export default function TicketsPage() {
   const [technicians, setTechnicians] = useState<UserProfile[]>([]);
 
   // UI state
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<NormalizedTicket | null>(null);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [ticketToDelete, setTicketToDelete] = useState<Ticket | null>(null);
+  const [ticketToDelete, setTicketToDelete] = useState<NormalizedTicket | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Comments state
@@ -107,17 +111,25 @@ export default function TicketsPage() {
           buildingId: building
         });
 
-        // Load tickets based on role
-        const ticketsRes = await fetch(
-          `/api/tickets/list?uid=${user.uid}&role=${role}&buildingId=${building}`
-        );
+        // Load tickets based on role - use URLSearchParams like dashboard
+        const params = new URLSearchParams({
+          uid: user.uid,
+          role: role
+        });
+        if (building && building !== 'null' && building !== 'undefined') {
+          params.append('buildingId', building);
+        }
+        
+        const ticketsRes = await fetch(`/api/tickets/list?${params.toString()}`);
         const ticketsData = await ticketsRes.json();
 
         console.log('[Tickets Debug] API Response:', ticketsData);
 
         if (ticketsData.success) {
-          console.log('[Tickets Debug] Setting', ticketsData.data.length, 'tickets');
-          setTickets(ticketsData.data);
+          // Normalize tickets for consistent UI display
+          const normalized = normalizeTickets(ticketsData.data);
+          console.log('[Tickets Debug] Setting', normalized.length, 'normalized tickets');
+          setTickets(normalized);
         } else {
           console.log('[Tickets Debug] API returned error:', ticketsData.error);
         }
@@ -142,6 +154,41 @@ export default function TicketsPage() {
     return () => unsubscribe();
   }, [router]);
 
+  // Real-time polling for tickets - refresh every 15 seconds
+  useEffect(() => {
+    if (!userId || !userRole) return;
+
+    const fetchTickets = async () => {
+      try {
+        // Use URLSearchParams like dashboard for consistent filtering
+        const params = new URLSearchParams({
+          uid: userId,
+          role: userRole
+        });
+        if (buildingId && buildingId !== 'null' && buildingId !== 'undefined') {
+          params.append('buildingId', buildingId);
+        }
+        
+        const ticketsRes = await fetch(`/api/tickets/list?${params.toString()}`);
+        const ticketsData = await ticketsRes.json();
+
+        if (ticketsData.success) {
+          setTickets(normalizeTickets(ticketsData.data));
+          console.log('[Tickets Real-time] Updated', ticketsData.data.length, 'tickets');
+        }
+      } catch (err) {
+        console.error('[Tickets Real-time] Error fetching tickets:', err);
+      }
+    };
+
+    // Set up polling interval - refresh every 15 seconds
+    const interval = setInterval(() => {
+      fetchTickets();
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [userId, userRole, buildingId]);
+
   const handleStatusChange = async (ticketId: string, newStatus: TicketStatus) => {
     if (!userId || !userName) return;
 
@@ -165,15 +212,17 @@ export default function TicketsPage() {
         return;
       }
 
-      // Reload tickets
-      if (userId && userRole && buildingId) {
-        const ticketsRes = await fetch(
-          `/api/tickets/list?uid=${userId}&role=${userRole}&buildingId=${buildingId}`
-        );
+      // Reload tickets using URLSearchParams
+      if (userId && userRole) {
+        const params = new URLSearchParams({ uid: userId, role: userRole });
+        if (buildingId && buildingId !== 'null' && buildingId !== 'undefined') {
+          params.append('buildingId', buildingId);
+        }
+        const ticketsRes = await fetch(`/api/tickets/list?${params.toString()}`);
         const ticketsData = await ticketsRes.json();
 
         if (ticketsData.success) {
-          setTickets(ticketsData.data);
+          setTickets(normalizeTickets(ticketsData.data));
         }
       }
     } catch (err) {
@@ -207,15 +256,17 @@ export default function TicketsPage() {
       setShowAssignModal(false);
       setSelectedTicket(null);
 
-      // Reload tickets
-      if (userId && userRole && buildingId) {
-        const ticketsRes = await fetch(
-          `/api/tickets/list?uid=${userId}&role=${userRole}&buildingId=${buildingId}`
-        );
+      // Reload tickets using URLSearchParams
+      if (userId && userRole) {
+        const params = new URLSearchParams({ uid: userId, role: userRole });
+        if (buildingId && buildingId !== 'null' && buildingId !== 'undefined') {
+          params.append('buildingId', buildingId);
+        }
+        const ticketsRes = await fetch(`/api/tickets/list?${params.toString()}`);
         const ticketsData = await ticketsRes.json();
 
         if (ticketsData.success) {
-          setTickets(ticketsData.data);
+          setTickets(normalizeTickets(ticketsData.data));
         }
       }
     } catch (err) {
@@ -257,7 +308,7 @@ export default function TicketsPage() {
   };
 
   // Check if user can delete a specific ticket
-  const canDeleteTicket = (ticket: Ticket): boolean => {
+  const canDeleteTicket = (ticket: NormalizedTicket): boolean => {
     if (!userRole || !userId) return false;
 
     // Admin can delete any ticket
@@ -345,13 +396,15 @@ export default function TicketsPage() {
   // Reload tickets after creating a new one
   const handleTicketCreated = async () => {
     setShowCreateModal(false);
-    if (userId && userRole && buildingId) {
-      const ticketsRes = await fetch(
-        `/api/tickets/list?uid=${userId}&role=${userRole}&buildingId=${buildingId}`
-      );
+    if (userId && userRole) {
+      const params = new URLSearchParams({ uid: userId, role: userRole });
+      if (buildingId && buildingId !== 'null' && buildingId !== 'undefined') {
+        params.append('buildingId', buildingId);
+      }
+      const ticketsRes = await fetch(`/api/tickets/list?${params.toString()}`);
       const ticketsData = await ticketsRes.json();
       if (ticketsData.success) {
-        setTickets(ticketsData.data);
+        setTickets(normalizeTickets(ticketsData.data));
       }
     }
   };
@@ -608,7 +661,7 @@ export default function TicketsPage() {
                       <tr key={ticket.id} className="hover:bg-opacity-50" style={{ background: "var(--card)" }}>
                         <td className="px-6 py-4">
                           <span className="font-mono text-sm" style={{ color: "var(--muted)" }}>
-                            #{ticket.id.slice(0, 8)}
+                            {ticket.displayId}
                           </span>
                         </td>
                         <td className="px-6 py-4">
@@ -622,13 +675,13 @@ export default function TicketsPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className={`font-medium capitalize ${getPriorityColor(ticket.priority)}`}>
-                            {ticket.priority}
+                          <span className={`font-medium ${getPriorityColor(ticket.priority)}`}>
+                            {ticket.priorityLabel}
                           </span>
                         </td>
                         <td className="px-6 py-4">
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${getStatusColor(ticket.status)}`}>
-                            {ticket.status}
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(ticket.status)}`}>
+                            {ticket.statusLabel}
                           </span>
                         </td>
                         {userRole === "admin" && (
@@ -637,7 +690,7 @@ export default function TicketsPage() {
                               <span style={{ color: "var(--card-contrast-text)" }}>{ticket.createdByName}</span>
                             </td>
                             <td className="px-6 py-4">
-                              {ticket.assignedToName ? (
+                              {ticket.assignedToName !== 'Unassigned' ? (
                                 <span style={{ color: "var(--card-contrast-text)" }}>{ticket.assignedToName}</span>
                               ) : (
                                 <button
