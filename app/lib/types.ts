@@ -29,9 +29,11 @@ export interface Building {
   id: string;
   name: string;
   address: string;
-  joinCode: string;         // unique join code in format ABC-123-XYZ
-  adminId: string;          // user who created this building
-  isActive: boolean;        // building active status
+  state?: string;             // Indian state or UT
+  area?: string;              // City/area within the state
+  joinCode: string;           // unique join code in format ABC-123-XYZ
+  adminId: string;            // user who created this building
+  isActive: boolean;          // building active status
   createdAt: Date;
   updatedAt: Date;
 }

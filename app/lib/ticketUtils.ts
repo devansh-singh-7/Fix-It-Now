@@ -72,15 +72,17 @@ function formatStatusLabel(status: string): string {
 function normalizeStatus(status: any): TicketStatus {
   if (!status || typeof status !== 'string') return 'open';
   
-  const normalized = status.toLowerCase().trim() as TicketStatus;
+  const lowercased = status.toLowerCase().trim();
+  
+  // Handle common variations first (before type assertion)
+  if (lowercased === 'inprogress' || lowercased === 'in-progress') {
+    return 'in_progress';
+  }
+  
+  const normalized = lowercased as TicketStatus;
   
   if (VALID_STATUSES.includes(normalized)) {
     return normalized;
-  }
-  
-  // Handle common variations
-  if (normalized === 'inprogress' || normalized === 'in-progress') {
-    return 'in_progress';
   }
   
   return 'open'; // Default fallback
@@ -92,15 +94,17 @@ function normalizeStatus(status: any): TicketStatus {
 function normalizePriority(priority: any): TicketPriority {
   if (!priority || typeof priority !== 'string') return 'medium';
   
-  const normalized = priority.toLowerCase().trim() as TicketPriority;
+  const lowercased = priority.toLowerCase().trim();
+  
+  // Handle variations first (before type assertion)
+  if (lowercased === 'critical' || lowercased === 'urgent') {
+    return 'high';
+  }
+  
+  const normalized = lowercased as TicketPriority;
   
   if (VALID_PRIORITIES.includes(normalized)) {
     return normalized;
-  }
-  
-  // Handle variations
-  if (normalized === 'critical' || normalized === 'urgent') {
-    return 'high';
   }
   
   return 'medium'; // Default fallback

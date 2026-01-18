@@ -4,7 +4,7 @@ import { createBuilding } from '@/app/lib/database';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { adminUid, name, address } = body;
+    const { adminUid, name, address, state, area } = body;
 
     // Validate required fields
     if (!adminUid || !name || !address) {
@@ -17,10 +17,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create building
+    // Create building with optional state and area
     const building = await createBuilding(adminUid, {
       name: name.trim(),
-      address: address.trim()
+      address: address.trim(),
+      state: state?.trim() || undefined,
+      area: area?.trim() || undefined,
     });
 
     return NextResponse.json({

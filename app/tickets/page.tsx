@@ -446,32 +446,32 @@ export default function TicketsPage() {
   const getStatusColor = (status: TicketStatus) => {
     switch (status) {
       case "open":
-        return "bg-blue-100 text-blue-800";
+        return "bg-blue-500/20 text-blue-300 border border-blue-500/30";
       case "assigned":
-        return "bg-purple-100 text-purple-800";
+        return "bg-purple-500/20 text-purple-300 border border-purple-500/30";
       case "accepted":
-        return "bg-indigo-100 text-indigo-800";
+        return "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30";
       case "in_progress":
-        return "bg-yellow-100 text-yellow-800";
+        return "bg-amber-500/20 text-amber-300 border border-amber-500/30";
       case "completed":
-        return "bg-green-100 text-green-800";
+        return "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30";
       default:
-        return "bg-gray-100 text-gray-800";
+        return "bg-slate-500/20 text-slate-300 border border-slate-500/30";
     }
   };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case "urgent":
-        return "text-red-600";
+        return "text-red-400";
       case "high":
-        return "text-orange-600";
+        return "text-orange-400";
       case "medium":
-        return "text-yellow-600";
+        return "text-yellow-400";
       case "low":
-        return "text-green-600";
+        return "text-emerald-400";
       default:
-        return "text-gray-600";
+        return "text-slate-400";
     }
   };
 
@@ -567,29 +567,48 @@ export default function TicketsPage() {
             <motion.div
               initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="p-12 text-center rounded-xl border"
+              className="relative p-12 text-center rounded-2xl overflow-hidden"
               style={{
-                background: "var(--card)",
-                borderColor: "rgba(15,23,42,0.1)",
+                background: "linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%)",
+                backdropFilter: "blur(16px)",
+                border: "1px solid rgba(148, 163, 184, 0.1)",
+                boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05)",
               }}
             >
-              <svg
-                className="w-16 h-16 mx-auto mb-4 opacity-50"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-              <h3 className="text-lg font-medium mb-2" style={{ color: "var(--card-contrast-text)" }}>
+              {/* Animated gradient border effect */}
+              <div 
+                className="absolute inset-0 rounded-2xl pointer-events-none"
+                style={{
+                  background: "linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(20, 184, 166, 0.1) 50%, rgba(59, 130, 246, 0.15) 100%)",
+                  opacity: 0.5,
+                }}
+              />
+              
+              {/* Decorative glow orbs */}
+              <div className="absolute -top-20 -right-20 w-40 h-40 rounded-full bg-emerald-500/10 blur-3xl" />
+              <div className="absolute -bottom-20 -left-20 w-40 h-40 rounded-full bg-blue-500/10 blur-3xl" />
+              
+              {/* Icon with gradient background */}
+              <div className="relative mx-auto mb-6 w-20 h-20 rounded-2xl bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center border border-slate-600/30">
+                <svg
+                  className="w-10 h-10 text-slate-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
+                </svg>
+              </div>
+              
+              <h3 className="relative text-xl font-semibold mb-3 text-white">
                 No tickets found
               </h3>
-              <p className="mb-4" style={{ color: "var(--muted)" }}>
+              <p className="relative text-slate-400 mb-6 max-w-md mx-auto">
                 {userRole === "admin" && "No tickets have been created for your building yet."}
                 {userRole === "technician" && "No tickets have been assigned to you yet."}
                 {userRole === "resident" && "You haven't created any tickets yet."}
@@ -598,7 +617,7 @@ export default function TicketsPage() {
               {userRole !== 'technician' && (
                 <button
                   onClick={() => setShowCreateModal(true)}
-                  className="inline-flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl hover:shadow-emerald-500/25 transition-all duration-300"
+                  className="relative inline-flex items-center gap-2 px-6 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl hover:shadow-emerald-500/25 hover:scale-[1.02] transition-all duration-300"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -611,65 +630,70 @@ export default function TicketsPage() {
             <motion.div
               initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="rounded-xl border overflow-hidden"
+              className="rounded-2xl overflow-hidden"
               style={{
-                background: "var(--card)",
-                borderColor: "rgba(15,23,42,0.1)",
+                background: "linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%)",
+                backdropFilter: "blur(16px)",
+                border: "1px solid rgba(148, 163, 184, 0.1)",
+                boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.4)",
               }}
             >
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead style={{ background: "rgba(15,23,42,0.03)" }}>
-                    <tr>
-                      <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: "var(--card-contrast-text)" }}>
+                  <thead>
+                    <tr style={{ background: "rgba(15, 23, 42, 0.5)" }}>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
                         Ticket ID
                       </th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: "var(--card-contrast-text)" }}>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
                         Title
                       </th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: "var(--card-contrast-text)" }}>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
                         Priority
                       </th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: "var(--card-contrast-text)" }}>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
                         Status
                       </th>
                       {userRole === "admin" && (
                         <>
-                          <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: "var(--card-contrast-text)" }}>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
                             Created By
                           </th>
-                          <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: "var(--card-contrast-text)" }}>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
                             Assigned To
                           </th>
                         </>
                       )}
                       {userRole === "technician" && (
-                        <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: "var(--card-contrast-text)" }}>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
                           Resident
                         </th>
                       )}
-                      <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: "var(--card-contrast-text)" }}>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
                         Location
                       </th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold" style={{ color: "var(--card-contrast-text)" }}>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
                         Actions
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y" style={{ borderColor: "rgba(15,23,42,0.08)" }}>
+                  <tbody className="divide-y divide-slate-700/50">
                     {tickets.map((ticket) => (
-                      <tr key={ticket.id} className="hover:bg-opacity-50" style={{ background: "var(--card)" }}>
+                      <tr 
+                        key={ticket.id} 
+                        className="transition-colors hover:bg-slate-800/30"
+                      >
                         <td className="px-6 py-4">
-                          <span className="font-mono text-sm" style={{ color: "var(--muted)" }}>
+                          <span className="font-mono text-sm text-slate-400">
                             {ticket.displayId}
                           </span>
                         </td>
                         <td className="px-6 py-4">
                           <div>
-                            <p className="font-medium" style={{ color: "var(--card-contrast-text)" }}>
+                            <p className="font-medium text-white">
                               {ticket.title}
                             </p>
-                            <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
+                            <p className="text-sm mt-1 text-slate-400">
                               {ticket.description.slice(0, 60)}...
                             </p>
                           </div>
@@ -680,27 +704,27 @@ export default function TicketsPage() {
                           </span>
                         </td>
                         <td className="px-6 py-4">
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(ticket.status)}`}>
+                          <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${getStatusColor(ticket.status)}`}>
                             {ticket.statusLabel}
                           </span>
                         </td>
                         {userRole === "admin" && (
                           <>
                             <td className="px-6 py-4">
-                              <span style={{ color: "var(--card-contrast-text)" }}>{ticket.createdByName}</span>
+                              <span className="text-slate-200">{ticket.createdByName}</span>
                             </td>
                             <td className="px-6 py-4">
                               {ticket.assignedToName !== 'Unassigned' ? (
-                                <span style={{ color: "var(--card-contrast-text)" }}>{ticket.assignedToName}</span>
+                                <span className="text-slate-200">{ticket.assignedToName}</span>
                               ) : (
                                 <button
                                   onClick={() => {
                                     setSelectedTicket(ticket);
                                     setShowAssignModal(true);
                                   }}
-                                  className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                                  className="text-emerald-400 hover:text-emerald-300 text-sm font-medium transition-colors"
                                 >
-                                  Assign
+                                  + Assign
                                 </button>
                               )}
                             </td>
@@ -708,27 +732,22 @@ export default function TicketsPage() {
                         )}
                         {userRole === "technician" && (
                           <td className="px-6 py-4">
-                            <span style={{ color: "var(--card-contrast-text)" }}>{ticket.createdByName}</span>
+                            <span className="text-slate-200">{ticket.createdByName}</span>
                           </td>
                         )}
                         <td className="px-6 py-4">
-                          <span style={{ color: "var(--muted)" }}>{ticket.location}</span>
+                          <span className="text-slate-400">{ticket.location}</span>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex gap-2">
                             <select
                               value={ticket.status}
                               onChange={(e) => handleStatusChange(ticket.id, e.target.value as TicketStatus)}
-                              className="px-3 py-1 rounded border text-sm"
-                              style={{
-                                background: "var(--card)",
-                                borderColor: "rgba(15,23,42,0.1)",
-                                color: "var(--card-contrast-text)",
-                              }}
+                              className="px-3 py-1.5 rounded-lg text-sm bg-slate-700/50 border border-slate-600/50 text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
                               disabled={getValidStatusOptions(ticket.status).length <= 1}
                             >
                               {getValidStatusOptions(ticket.status).map((status) => (
-                                <option key={status} value={status}>
+                                <option key={status} value={status} className="bg-slate-800">
                                   {status === 'open' ? 'Open' :
                                     status === 'assigned' ? 'Assigned' :
                                       status === 'accepted' ? 'Accepted' :
@@ -744,12 +763,7 @@ export default function TicketsPage() {
                                 setShowDetailsModal(true);
                                 loadComments(ticket.id);
                               }}
-                              className="px-3 py-1 rounded border text-sm font-medium transition-all hover:opacity-80"
-                              style={{
-                                background: "var(--card)",
-                                borderColor: "rgba(15,23,42,0.1)",
-                                color: "var(--card-contrast-text)",
-                              }}
+                              className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-700/50 border border-slate-600/50 text-slate-200 hover:bg-slate-600/50 transition-all"
                             >
                               View
                             </button>
@@ -761,12 +775,7 @@ export default function TicketsPage() {
                                   setTicketToDelete(ticket);
                                   setShowDeleteModal(true);
                                 }}
-                                className="px-3 py-1 rounded border text-sm font-medium transition-all hover:bg-red-50 hover:border-red-300 hover:text-red-600"
-                                style={{
-                                  background: "var(--card)",
-                                  borderColor: "rgba(15,23,42,0.1)",
-                                  color: "var(--card-contrast-text)",
-                                }}
+                                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-900/30 border border-red-700/50 text-red-400 hover:bg-red-800/40 hover:text-red-300 transition-all"
                               >
                                 Delete
                               </button>

@@ -284,6 +284,8 @@ export async function createBuilding(
   buildingData: {
     name: string;
     address: string;
+    state?: string;
+    area?: string;
   }
 ): Promise<Building> {
   let session: ClientSession | undefined;
@@ -319,6 +321,8 @@ export async function createBuilding(
       id: new Date().getTime().toString(),
       name: buildingData.name,
       address: buildingData.address,
+      state: buildingData.state,
+      area: buildingData.area,
       joinCode,
       adminId: adminUid,
       isActive: true,
@@ -675,8 +679,24 @@ export async function updateBuilding(
   try {
     const db = await getDatabase();
 
-    // Verify admin owns this building
-    const building = await db.collection('buildings').findOne({ id: buildingId });
+    // First try the custom id field
+    let building = await db.collection('buildings').findOne({ id: buildingId });
+    let filter: Record<string, unknown> = { id: buildingId };
+
+    // If not found, try with _id (for MongoDB ObjectId)
+    if (!building) {
+      try {
+        const { ObjectId } = await import('mongodb');
+        if (ObjectId.isValid(buildingId)) {
+          building = await db.collection('buildings').findOne({ _id: new ObjectId(buildingId) });
+          if (building) {
+            filter = { _id: new ObjectId(buildingId) };
+          }
+        }
+      } catch {
+        // ObjectId parsing failed, ignore
+      }
+    }
 
     if (!building) {
       return { success: false, error: 'Building not found' };
@@ -692,7 +712,7 @@ export async function updateBuilding(
     if (updates.address) updateData.address = updates.address.trim();
 
     await db.collection('buildings').updateOne(
-      { id: buildingId },
+      filter,
       { $set: updateData }
     );
 
@@ -714,8 +734,24 @@ export async function deleteBuilding(
   try {
     const db = await getDatabase();
 
-    // Verify admin owns this building
-    const building = await db.collection('buildings').findOne({ id: buildingId });
+    // First try the custom id field
+    let building = await db.collection('buildings').findOne({ id: buildingId });
+    let filter: Record<string, unknown> = { id: buildingId };
+
+    // If not found, try with _id (for MongoDB ObjectId)
+    if (!building) {
+      try {
+        const { ObjectId } = await import('mongodb');
+        if (ObjectId.isValid(buildingId)) {
+          building = await db.collection('buildings').findOne({ _id: new ObjectId(buildingId) });
+          if (building) {
+            filter = { _id: new ObjectId(buildingId) };
+          }
+        }
+      } catch {
+        // ObjectId parsing failed, ignore
+      }
+    }
 
     if (!building) {
       return { success: false, error: 'Building not found' };
@@ -727,7 +763,7 @@ export async function deleteBuilding(
 
     // Soft delete - set isActive to false
     await db.collection('buildings').updateOne(
-      { id: buildingId },
+      filter,
       { $set: { isActive: false, updatedAt: new Date() } }
     );
 

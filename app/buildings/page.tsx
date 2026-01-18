@@ -6,11 +6,14 @@ import RouteGuard from "@/app/components/RouteGuard";
 import { auth } from "@/app/lib/firebaseClient";
 import { onAuthStateChanged } from "firebase/auth";
 import Link from "next/link";
+import { getStateNames, getAreasForState } from "@/app/lib/indiaLocations";
 
 interface BuildingData {
   id: string;
   name: string;
   address: string;
+  state?: string;
+  area?: string;
   joinCode: string;
   adminId?: string;
   createdAt?: Date;
@@ -41,6 +44,9 @@ export default function BuildingManagementPage() {
   // Form state
   const [buildingName, setBuildingName] = useState("");
   const [buildingAddress, setBuildingAddress] = useState("");
+  const [buildingState, setBuildingState] = useState("");
+  const [buildingArea, setBuildingArea] = useState("");
+  const [availableAreas, setAvailableAreas] = useState<string[]>([]);
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -129,6 +135,8 @@ export default function BuildingManagementPage() {
           adminUid: auth.currentUser.uid,
           name: buildingName.trim(),
           address: buildingAddress.trim(),
+          state: buildingState || undefined,
+          area: buildingArea || undefined,
         }),
       });
 
@@ -143,6 +151,8 @@ export default function BuildingManagementPage() {
         id: building.id,
         name: building.name,
         address: building.address,
+        state: building.state,
+        area: building.area,
         joinCode: building.joinCode,
         adminId: building.adminId,
       };
@@ -151,6 +161,9 @@ export default function BuildingManagementPage() {
       setSuccess("Building created successfully!");
       setBuildingName("");
       setBuildingAddress("");
+      setBuildingState("");
+      setBuildingArea("");
+      setAvailableAreas([]);
     } catch (err) {
       console.error("Error creating building:", err);
       if (err instanceof Error) {
@@ -461,6 +474,60 @@ export default function BuildingManagementPage() {
                     />
                   </div>
 
+                  {/* State and Area Dropdowns */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label htmlFor="buildingState" className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                        State / Union Territory
+                      </label>
+                      <select
+                        id="buildingState"
+                        value={buildingState}
+                        onChange={(e) => {
+                          const selectedState = e.target.value;
+                          setBuildingState(selectedState);
+                          setBuildingArea("");
+                          if (selectedState) {
+                            setAvailableAreas(getAreasForState(selectedState));
+                          } else {
+                            setAvailableAreas([]);
+                          }
+                        }}
+                        disabled={loading}
+                        className="w-full px-4 py-3 rounded-xl bg-white/50 dark:bg-gray-800/50 border border-gray-300/50 dark:border-gray-700/50 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <option value="">Select State</option>
+                        {getStateNames().map((stateName) => (
+                          <option key={stateName} value={stateName}>
+                            {stateName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label htmlFor="buildingArea" className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                        City / Area
+                      </label>
+                      <select
+                        id="buildingArea"
+                        value={buildingArea}
+                        onChange={(e) => setBuildingArea(e.target.value)}
+                        disabled={loading || !buildingState}
+                        className="w-full px-4 py-3 rounded-xl bg-white/50 dark:bg-gray-800/50 border border-gray-300/50 dark:border-gray-700/50 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <option value="">
+                          {buildingState ? "Select City/Area" : "Select state first"}
+                        </option>
+                        {availableAreas.map((areaName) => (
+                          <option key={areaName} value={areaName}>
+                            {areaName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
                   <button
                     type="submit"
                     disabled={loading}
@@ -541,6 +608,27 @@ export default function BuildingManagementPage() {
                               </svg>
                               {building.address}
                             </p>
+                            {/* State and Area display */}
+                            {(building.state || building.area) && (
+                              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                {building.state && (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+                                    </svg>
+                                    {building.state}
+                                  </span>
+                                )}
+                                {building.area && (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300">
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                    </svg>
+                                    {building.area}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                           {/* Action Buttons */}
                           <div className="flex items-center gap-2 flex-wrap">
