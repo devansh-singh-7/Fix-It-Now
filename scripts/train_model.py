@@ -26,18 +26,46 @@ def load_data(filepath):
         return list(csv.DictReader(f))
 
 def preprocess_features(row):
-    """Convert row to numeric features dict."""
+    """Convert row to numeric features dict with engineered features."""
+    # Base features
+    asset_age = float(row['asset_age_months'])
+    days_since_maint = float(row['days_since_last_maintenance'])
+    maint_count = float(row['total_maintenance_count'])
+    usage_hours = float(row['avg_monthly_usage_hours'])
+    temp = float(row['ambient_temperature_avg'])
+    humidity = float(row['humidity_level_avg'])
+    power_outages = float(row['power_outage_events_last_year'])
+    mfg_rating = float(row['manufacturer_rating'])
+    building_age = float(row['building_age_years'])
+    seasonal_factor = float(row['seasonal_load_factor'])
+    
+    # Feature engineering - interaction features
+    age_maint_ratio = days_since_maint / max(asset_age, 1)  # Maintenance frequency relative to age
+    usage_stress = usage_hours * seasonal_factor  # Usage under seasonal load
+    maint_per_year = (maint_count * 12) / max(asset_age, 1)  # Maintenance rate
+    env_stress = (temp - 25) * (humidity / 50)  # Environmental stress factor
+    quality_age_factor = mfg_rating / max(asset_age / 60, 1)  # Quality vs aging
+    combined_risk = (days_since_maint / 180) * (asset_age / 120)  # Combined risk score
+    
     return {
-        'asset_age_months': float(row['asset_age_months']),
-        'days_since_last_maintenance': float(row['days_since_last_maintenance']),
-        'total_maintenance_count': float(row['total_maintenance_count']),
-        'avg_monthly_usage_hours': float(row['avg_monthly_usage_hours']),
-        'ambient_temperature_avg': float(row['ambient_temperature_avg']),
-        'humidity_level_avg': float(row['humidity_level_avg']),
-        'power_outage_events_last_year': float(row['power_outage_events_last_year']),
-        'manufacturer_rating': float(row['manufacturer_rating']),
-        'building_age_years': float(row['building_age_years']),
-        'seasonal_load_factor': float(row['seasonal_load_factor']),
+        # Original features
+        'asset_age_months': asset_age,
+        'days_since_last_maintenance': days_since_maint,
+        'total_maintenance_count': maint_count,
+        'avg_monthly_usage_hours': usage_hours,
+        'ambient_temperature_avg': temp,
+        'humidity_level_avg': humidity,
+        'power_outage_events_last_year': power_outages,
+        'manufacturer_rating': mfg_rating,
+        'building_age_years': building_age,
+        'seasonal_load_factor': seasonal_factor,
+        # Engineered features
+        'age_maint_ratio': age_maint_ratio,
+        'usage_stress': usage_stress,
+        'maint_per_year': maint_per_year,
+        'env_stress': env_stress,
+        'quality_age_factor': quality_age_factor,
+        'combined_risk': combined_risk,
         # Categorical encoding
         'asset_type': row['asset_type'],
         'last_repair_severity': row['last_repair_severity'],
@@ -55,12 +83,13 @@ def get_target(row):
 
 class SimpleRandomForest:
     """
-    Simplified Random Forest that can be exported to JSON.
-    Uses decision stump ensemble for interpretability.
+    Improved Random Forest that can be exported to JSON.
+    Uses decision tree ensemble with feature engineering for better accuracy.
     """
     
-    def __init__(self, n_trees=50):
+    def __init__(self, n_trees=100, max_depth=8):
         self.n_trees = n_trees
+        self.max_depth = max_depth
         self.trees = []
         self.feature_importances = {}
         
@@ -90,15 +119,17 @@ class SimpleRandomForest:
         best_threshold = None
         
         import random
-        sampled_features = random.sample(features, min(5, len(features)))
+        # Sample more features for better splits (sqrt of total features is common)
+        n_sample = min(7, len(features))  # Sample 7 features each split
+        sampled_features = random.sample(features, n_sample)
         
         for feature in sampled_features:
             values = sorted(set(d['features'].get(feature, 0) for d in data if isinstance(d['features'].get(feature), (int, float))))
             if len(values) < 2:
                 continue
                 
-            # Try percentile thresholds
-            for percentile in [0.25, 0.5, 0.75]:
+            # Try more percentile thresholds for finer splits
+            for percentile in [0.1, 0.25, 0.4, 0.5, 0.6, 0.75, 0.9]:
                 idx = int(len(values) * percentile)
                 threshold = values[min(idx, len(values)-1)]
                 gain = self._calculate_split_gain(data, feature, threshold)
@@ -110,9 +141,9 @@ class SimpleRandomForest:
         
         return best_feature, best_threshold, best_gain
     
-    def _build_tree(self, data, depth=0, max_depth=5):
+    def _build_tree(self, data, depth=0):
         """Build a single decision tree."""
-        if depth >= max_depth or len(data) < 10:
+        if depth >= self.max_depth or len(data) < 10:
             # Leaf node - return majority class and avg probability
             risk_counts = Counter(d['target']['risk_level'] for d in data)
             majority_class = risk_counts.most_common(1)[0][0] if risk_counts else 'medium'
@@ -126,11 +157,15 @@ class SimpleRandomForest:
                 'samples': len(data)
             }
         
+        # Include both original and engineered features
         numeric_features = [
             'asset_age_months', 'days_since_last_maintenance', 'total_maintenance_count',
             'avg_monthly_usage_hours', 'ambient_temperature_avg', 'humidity_level_avg',
             'power_outage_events_last_year', 'manufacturer_rating', 'building_age_years',
-            'seasonal_load_factor'
+            'seasonal_load_factor',
+            # Engineered features
+            'age_maint_ratio', 'usage_stress', 'maint_per_year', 'env_stress',
+            'quality_age_factor', 'combined_risk'
         ]
         
         best_feature, best_threshold, gain = self._find_best_split(data, numeric_features)
@@ -159,8 +194,8 @@ class SimpleRandomForest:
             'type': 'split',
             'feature': best_feature,
             'threshold': round(best_threshold, 2),
-            'left': self._build_tree(left_data, depth + 1, max_depth),
-            'right': self._build_tree(right_data, depth + 1, max_depth)
+            'left': self._build_tree(left_data, depth + 1),
+            'right': self._build_tree(right_data, depth + 1)
         }
     
     def fit(self, data):
@@ -363,7 +398,7 @@ def main():
     
     # Train model
     print("\n[3/5] Training Random Forest model...")
-    model = SimpleRandomForest(n_trees=30)
+    model = SimpleRandomForest(n_trees=100, max_depth=8)
     model.fit(train_data)
     
     # Evaluate
