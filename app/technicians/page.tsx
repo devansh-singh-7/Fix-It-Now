@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, useReducedMotion, AnimatePresence } from 'framer-motion';
 import NavBar from '@/app/components/NavBar';
 import RouteGuard from '@/app/components/RouteGuard';
-import AddTechnicianModal from '@/app/components/AddTechnicianModal';
+
 
 type Technician = {
   uid: string;
@@ -56,8 +56,7 @@ export default function TechniciansPage() {
   const [announcementError, setAnnouncementError] = useState('');
   const [announcementSuccess, setAnnouncementSuccess] = useState('');
 
-  // Add Technician modal state
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
 
   useEffect(() => {
     // Get user info from localStorage
@@ -105,7 +104,11 @@ export default function TechniciansPage() {
     }
   };
 
+  // Filter technicians to only show those assigned to a building
   const filteredTechnicians = technicians.filter(tech => {
+    // Only show technicians that are assigned to a building
+    if (!tech.buildingId) return false;
+
     const matchesSearch = searchQuery === '' ||
       tech.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       tech.email.toLowerCase().includes(searchQuery.toLowerCase());
@@ -213,17 +216,6 @@ export default function TechniciansPage() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3">
-                {/* Add Technician Button */}
-                <button
-                  onClick={() => setIsAddModalOpen(true)}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-linear-to-r from-blue-600 to-cyan-600 text-white rounded-lg font-medium shadow-lg hover:shadow-xl hover:shadow-cyan-500/25 transition-all duration-300 group"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  Add Technician
-                </button>
-
                 {/* Post Announcement Button */}
                 {userBuildingId && (
                 <button
@@ -626,17 +618,7 @@ export default function TechniciansPage() {
           )}
         </AnimatePresence>
 
-        {/* Add Technician Modal */}
-        <AddTechnicianModal
-          isOpen={isAddModalOpen}
-          onClose={() => setIsAddModalOpen(false)}
-          onSuccess={() => {
-            fetchTechnicians(); // Refresh list
-            setIsAddModalOpen(false);
-          }}
-          adminBuildingId={userBuildingId}
-          adminBuildingName={userBuildingName}
-        />
+
       </div>
     </RouteGuard>
   );

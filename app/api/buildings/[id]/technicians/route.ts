@@ -103,6 +103,9 @@ export async function POST(
                 );
             }
 
+            // Store the previous building ID before updating
+            const previousBuildingId = existingUser.buildingId || null;
+
             await db.collection('users').updateOne(
                 { firebaseUid: technicianUid },
                 {
@@ -117,7 +120,8 @@ export async function POST(
 
             return NextResponse.json({
                 success: true,
-                message: 'Technician assigned to building'
+                message: 'Technician assigned to building',
+                previousBuildingId // Return this so frontend can clear cache for the old building
             });
         } else if (name && email) {
             // Check if a technician with this email already exists for this building

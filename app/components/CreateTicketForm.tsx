@@ -31,6 +31,13 @@ export default function CreateTicketForm({ isOpen, onClose, onSuccess }: CreateT
   const [isClassifying, setIsClassifying] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(''); // Upload status message
   const [error, setError] = useState('');
+  
+  // AI detection result from MobileNetV2
+  const [aiDetectionResult, setAiDetectionResult] = useState<{
+    detectedLabel: string;
+    confidence: number;
+    mappedCategory: string;
+  } | null>(null);
 
   // Load user profile - reload whenever modal opens to get latest building info
   useEffect(() => {
@@ -179,6 +186,16 @@ export default function CreateTicketForm({ isOpen, onClose, onSuccess }: CreateT
         createdByName: currentProfile.name,
         buildingId: currentProfile.buildingId,
         uid: currentProfile.uid,
+        // Include AI detection results if available
+        ...(aiDetectionResult && {
+          aiCategory: aiDetectionResult.mappedCategory,
+          aiDetection: {
+            detectedLabel: aiDetectionResult.detectedLabel,
+            confidence: aiDetectionResult.confidence,
+            mappedCategory: aiDetectionResult.mappedCategory,
+            modelVersion: 'mobilenet_v2_1.0',
+          },
+        }),
       };
 
       console.log('Creating ticket with data:', {
@@ -216,6 +233,7 @@ export default function CreateTicketForm({ isOpen, onClose, onSuccess }: CreateT
       });
       setImages([]);
       setImagePreviews([]);
+      setAiDetectionResult(null);
       onSuccess();
       onClose();
     } catch (err) {
@@ -360,9 +378,25 @@ export default function CreateTicketForm({ isOpen, onClose, onSuccess }: CreateT
                       <option value="security">Security</option>
                       <option value="other">Other</option>
                     </select>
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      Priority will be automatically assigned by the system
-                    </p>
+                    {aiDetectionResult ? (
+                      <div className="mt-2 p-2.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                          </svg>
+                          <span className="text-xs font-medium text-blue-800 dark:text-blue-300">
+                            AI Detected: <span className="font-semibold">{aiDetectionResult.detectedLabel}</span>
+                          </span>
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-200 font-medium">
+                            {(aiDetectionResult.confidence * 100).toFixed(0)}% confident
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Upload an image to auto-detect category using AI
+                      </p>
+                    )}
                   </div>
 
                   {/* Contact Phone */}
@@ -486,15 +520,29 @@ export default function CreateTicketForm({ isOpen, onClose, onSuccess }: CreateT
                         setImages(files);
                         setImagePreviews(previews);
 
-                        // Auto-classify first image if added and no category is selected
+                        // Auto-classify images if added and no category is selected
                         if (files.length > 0 && !formData.category) {
                           setIsClassifying(true);
                           try {
                             // Dynamically import TensorFlow/ai-classifier only when needed
                             const { aiClassifier } = await import('../lib/ai-classifier');
-                            const result = await aiClassifier.classifyFile(files[0]);
-                            if (result && result.category !== 'other') {
-                              setFormData((prev) => ({ ...prev, category: result.category }));
+                            
+                            // Use multi-image classification for better accuracy
+                            const result = files.length > 1 
+                              ? await aiClassifier.classifyMultipleFiles(files)
+                              : await aiClassifier.classifyFile(files[0]);
+                            
+                            if (result) {
+                              // Store AI detection result for submission
+                              setAiDetectionResult({
+                                detectedLabel: result.label,
+                                confidence: result.confidence,
+                                mappedCategory: result.category,
+                              });
+                              // Auto-select category if it's not 'other'
+                              if (result.category !== 'other') {
+                                setFormData((prev) => ({ ...prev, category: result.category }));
+                              }
                             }
                           } catch (err) {
                             console.error('Image classification failed:', err);

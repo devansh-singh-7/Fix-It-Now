@@ -298,6 +298,16 @@ export default function BuildingManagementPage() {
         throw new Error(result.error || 'Failed to assign technician');
       }
 
+      // If the technician was reassigned from another building, clear both buildings' caches
+      if (result.previousBuildingId && result.previousBuildingId !== selectedBuildingId) {
+        // Remove the old building's cached technician list so it gets refreshed next time
+        setBuildingTechnicians(prev => {
+          const updated = { ...prev };
+          delete updated[result.previousBuildingId];
+          return updated;
+        });
+      }
+
       // Reload technicians for this building
       const techRes = await fetch(`/api/buildings/${selectedBuildingId}/technicians`, {
         headers: { 'x-user-id': auth.currentUser.uid },

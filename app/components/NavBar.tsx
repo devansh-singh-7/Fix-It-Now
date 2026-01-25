@@ -78,6 +78,16 @@ const NAV_LINKS: NavLink[] = [
       </svg>
     )
   },
+  {
+    name: 'Predictions',
+    href: '/predictions',
+    roles: ['admin', 'technician', 'resident'],
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+      </svg>
+    )
+  },
 ];
 
 export default function NavBar() {
@@ -307,14 +317,14 @@ export default function NavBar() {
 
               {/* Desktop Navigation Links */}
               {user && (
-                <nav className="hidden lg:flex items-center gap-1">
+                <nav className="hidden lg:flex items-center gap-0.5">
                   {visibleLinks.map((link) => {
                     const isActive = pathname === link.href || pathname.startsWith(link.href + '/');
                     return (
                       <Link
                         key={link.href}
                         href={link.href}
-                        className={`relative px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 group ${isActive
+                        className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 group ${isActive
                           ? 'bg-linear-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 text-blue-700 dark:text-blue-400'
                           : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
                           }`}
@@ -326,7 +336,7 @@ export default function NavBar() {
 
                         {/* Active indicator */}
                         {isActive && (
-                          <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-8 h-0.5 bg-linear-to-r from-blue-600 to-indigo-600 rounded-full" />
+                          <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-6 h-0.5 bg-linear-to-r from-blue-600 to-indigo-600 rounded-full" />
                         )}
                       </Link>
                     );
@@ -603,6 +613,24 @@ export default function NavBar() {
                               </Link>
                             )}
                           </Menu.Item>
+
+                          {/* Predictions - Admin Only (not in main nav to reduce crowding) */}
+                          {userRole === 'admin' && (
+                            <Menu.Item>
+                              {({ active }) => (
+                                <Link
+                                  href="/predictions"
+                                  className={`${active ? 'bg-gray-100 dark:bg-gray-800' : ''
+                                    } flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300`}
+                                >
+                                  <svg className="w-4 h-4 text-blue-500 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                  </svg>
+                                  Predictions
+                                </Link>
+                              )}
+                            </Menu.Item>
+                          )}
 
                           {/* Manage Admins - Super Admin Only */}
                           {isSuperAdmin && (

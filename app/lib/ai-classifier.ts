@@ -17,105 +17,108 @@ export type AppCategory =
 
 // Mapping keywords to categories with weighted relevance
 // MobileNet classes are often specific (e.g., 'espresso maker', 'toilet seat')
+// Expanded keywords for better detection accuracy
 const CATEGORY_KEYWORDS: Record<AppCategory, string[]> = {
   plumbing: [
-    'toilet',
+    'toilet', 'toilet seat', 'toilet tissue',
     'bidet',
-    'sink',
-    'tub',
-    'bathtub',
-    'shower',
-    'faucet',
-    'spigot',
-    'pipe',
-    'drain',
-    'plunger',
-    'washbasin',
-    'water jug',
-    'water bottle',
+    'sink', 'washbasin', 'basin',
+    'tub', 'bathtub', 'hot tub',
+    'shower', 'shower curtain', 'shower cap',
+    'faucet', 'spigot', 'tap',
+    'pipe', 'plunger', 'drain',
+    'water jug', 'water bottle', 'water tower',
+    'fountain', 'swimming pool', 'jacuzzi',
   ],
   electrical: [
-    'switch',
-    'socket',
-    'plug',
-    'lamp',
-    'lampshade',
-    'light',
-    'bulb',
-    'chandelier',
-    'heater',
-    'fan',
-    'electric',
-    'vacuum',
-    'iron',
-    'toaster',
-    'microwave',
+    'switch', 'light switch',
+    'socket', 'plug', 'power plug', 'outlet',
+    'lamp', 'lampshade', 'table lamp', 'floor lamp',
+    'light', 'light bulb', 'bulb', 'spotlight',
+    'chandelier', 'candelabra',
+    'heater', 'space heater', 'electric heater',
+    'fan', 'ceiling fan', 'electric fan',
+    'electric', 'power strip', 'extension cord',
+    'vacuum', 'vacuum cleaner',
+    'iron', 'steam iron', 'waffle iron',
+    'toaster', 'microwave',
+    'remote control', 'joystick',
+    'wiring', 'circuit', 'fuse',
   ],
-  hvac: ['air conditioner', 'heater', 'radiator', 'stove', 'furnace', 'vent', 'cooler', 'fan'],
+  hvac: [
+    'air conditioner', 'ac unit',
+    'heater', 'radiator', 'space heater',
+    'stove', 'furnace', 'boiler',
+    'vent', 'ventilator', 'air vent',
+    'cooler', 'fan', 'blower',
+    'thermostat', 'thermometer',
+    'humidifier', 'dehumidifier',
+  ],
   appliance: [
-    'refrigerator',
-    'freezer',
-    'ice box',
-    'dishwasher',
-    'washer',
-    'washing machine',
-    'dryer',
-    'microwave',
-    'stove',
-    'oven',
-    'toaster',
-    'coffee pot',
-    'espresso maker',
-    'coffeepot',
-    'television',
-    'monitor',
-    'screen',
-    'laptop',
-    'desktop',
-    'computer',
-    'printer',
+    'refrigerator', 'fridge', 'freezer', 'ice box',
+    'dishwasher', 'washer', 'washing machine', 'dryer',
+    'microwave', 'oven', 'stove', 'range',
+    'toaster', 'coffee pot', 'espresso maker', 'coffeepot',
+    'blender', 'mixer', 'food processor',
+    'television', 'tv', 'monitor', 'screen', 'plasma',
+    'laptop', 'desktop', 'computer', 'keyboard', 'mouse',
+    'printer', 'scanner', 'copier',
+    'water heater', 'garbage disposal',
+    'rice cooker', 'slow cooker', 'pressure cooker',
+    'air fryer', 'grill', 'barbecue',
   ],
   carpentry: [
-    'door',
-    'wardrobe',
-    'cabinet',
-    'shelf',
-    'bookcase',
-    'desk',
-    'table',
-    'chair',
-    'seat',
-    'sofa',
-    'couch',
-    'bed',
-    'closet',
-    'furniture',
-    'fence',
-    'lumber',
-    'wooden',
+    'door', 'sliding door', 'screen door', 'doormat',
+    'window', 'window frame', 'window shade', 'blind',
+    'wardrobe', 'cabinet', 'cupboard', 'drawer',
+    'shelf', 'bookcase', 'bookshelf',
+    'desk', 'table', 'dining table', 'coffee table',
+    'chair', 'rocking chair', 'folding chair', 'seat', 'stool',
+    'sofa', 'couch', 'loveseat', 'ottoman',
+    'bed', 'bunk bed', 'crib', 'cradle',
+    'closet', 'furniture', 'armoire',
+    'fence', 'railing', 'banister',
+    'lumber', 'wooden', 'plywood', 'hardwood',
+    'floor', 'parquet', 'tile', 'laminate',
+    'ceiling', 'beam', 'joist',
   ],
   cleaning: [
-    'trash',
-    'waste',
-    'garbage',
-    'bin',
-    'broom',
-    'mop',
-    'bucket',
-    'soap',
-    'towel',
-    'sponge',
-    'mess',
-    'dirt',
-    'dust',
+    'trash', 'waste', 'garbage', 'rubbish',
+    'bin', 'trash can', 'waste basket', 'dumpster',
+    'broom', 'mop', 'sweeper',
+    'bucket', 'pail',
+    'soap', 'detergent', 'cleaner',
+    'towel', 'paper towel', 'napkin',
+    'sponge', 'scrubber',
+    'mess', 'dirt', 'dust', 'stain',
+    'mold', 'mildew', 'fungus',
   ],
   painting: [
-    'wall',
-    'paint',
-    'brush', // Hard to detect 'painting' task from object, usually it's the object itself
+    'wall', 'wallpaper', 'mural',
+    'paint', 'paint bucket', 'paint can',
+    'brush', 'paintbrush', 'roller',
+    'ladder', 'scaffold',
+    'crack', 'peeling', 'chipped',
   ],
-  landscaping: ['lawn', 'mower', 'grass', 'tree', 'plant', 'flower', 'garden', 'shovel', 'rake'],
-  security: ['lock', 'padlock', 'key', 'gate', 'camera'],
+  landscaping: [
+    'lawn', 'mower', 'lawn mower', 'grass',
+    'tree', 'bush', 'shrub', 'hedge',
+    'plant', 'flower', 'pot', 'flowerpot', 'planter',
+    'garden', 'yard', 'patio', 'deck',
+    'shovel', 'rake', 'hoe', 'trowel',
+    'sprinkler', 'hose', 'watering can',
+    'fence', 'gate', 'gazebo', 'pergola',
+    'soil', 'mulch', 'compost',
+  ],
+  security: [
+    'lock', 'padlock', 'deadbolt', 'latch',
+    'key', 'keyhole', 'keypad',
+    'gate', 'fence', 'barrier',
+    'camera', 'security camera', 'cctv', 'webcam',
+    'alarm', 'smoke detector', 'fire alarm',
+    'safe', 'vault', 'strongbox',
+    'intercom', 'doorbell', 'buzzer',
+  ],
   other: [],
 };
 
@@ -217,6 +220,55 @@ class AIClassifier {
         reject(err);
       };
     });
+  }
+
+  /**
+   * Classify multiple image files and return the best overall result
+   * This aggregates results from all images and picks the best match
+   */
+  async classifyMultipleFiles(
+    files: File[]
+  ): Promise<{ 
+    category: AppCategory; 
+    confidence: number; 
+    label: string;
+    allResults: Array<{ category: AppCategory; confidence: number; label: string; fileIndex: number }>;
+  } | null> {
+    if (files.length === 0) return null;
+
+    try {
+      const results: Array<{ category: AppCategory; confidence: number; label: string; fileIndex: number }> = [];
+
+      // Classify each file
+      for (let i = 0; i < files.length; i++) {
+        const result = await this.classifyFile(files[i]);
+        if (result) {
+          results.push({ ...result, fileIndex: i });
+        }
+      }
+
+      if (results.length === 0) return null;
+
+      // Find the best result (highest confidence that's not 'other')
+      const nonOtherResults = results.filter(r => r.category !== 'other');
+      const bestResult = nonOtherResults.length > 0
+        ? nonOtherResults.reduce((best, current) => 
+            current.confidence > best.confidence ? current : best
+          )
+        : results[0];
+
+      console.log(`[AI Classifier] Analyzed ${files.length} images, best match: ${bestResult.label} (${bestResult.category})`);
+
+      return {
+        category: bestResult.category,
+        confidence: bestResult.confidence,
+        label: bestResult.label,
+        allResults: results,
+      };
+    } catch (error) {
+      console.error('Error classifying multiple files:', error);
+      return null;
+    }
   }
 
   private findBestCategoryMatch(predictions: Array<{ className: string; probability: number }>): {

@@ -38,6 +38,13 @@ export interface NormalizedTicket {
   createdAt: Date | null;
   updatedAt: Date | null;
   completedAt: Date | null;
+  // AI/MobileNetV2 detection info
+  aiDetection: {
+    detectedLabel: string;
+    confidence: number;
+    mappedCategory: string;
+    modelVersion: string;
+  } | null;
   // Original data reference
   _raw: any;
 }
@@ -195,6 +202,7 @@ export function normalizeTicket(ticket: any): NormalizedTicket {
       createdAt: null,
       updatedAt: null,
       completedAt: null,
+      aiDetection: null,
       _raw: ticket,
     };
   }
@@ -245,6 +253,13 @@ export function normalizeTicket(ticket: any): NormalizedTicket {
     createdAt: parseDate(ticket.createdAt || ticket.created_at),
     updatedAt: parseDate(ticket.updatedAt || ticket.updated_at),
     completedAt: parseDate(ticket.completedAt || ticket.completed_at),
+    // AI detection results from MobileNetV2
+    aiDetection: ticket.aiDetection ? {
+      detectedLabel: getString(ticket.aiDetection.detectedLabel, 'Unknown'),
+      confidence: typeof ticket.aiDetection.confidence === 'number' ? ticket.aiDetection.confidence : 0,
+      mappedCategory: getString(ticket.aiDetection.mappedCategory, 'other'),
+      modelVersion: getString(ticket.aiDetection.modelVersion, 'unknown'),
+    } : null,
     _raw: ticket,
   };
 }

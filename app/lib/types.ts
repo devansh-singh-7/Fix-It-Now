@@ -136,6 +136,14 @@ export interface Ticket {
   imageUrls?: string[];     // multiple image URLs
   imagePublicIds?: string[];  // Cloudinary public_ids for deletion
   aiCategory?: TicketCategory; // from MobileNetV2 or other AI model
+  
+  // AI/MobileNetV2 detection results
+  aiDetection?: {
+    detectedLabel: string;    // Raw label from MobileNetV2 (e.g., "toilet seat")
+    confidence: number;       // Confidence score 0-1
+    mappedCategory: TicketCategory;  // Category we mapped it to
+    modelVersion: string;     // Model identifier (e.g., "mobilenet_v2_1.0")
+  };
 
   // Timeline tracking
   timeline: TimelineEvent[];
@@ -204,6 +212,46 @@ export interface Prediction {
   prediction: PredictionResult;
   createdAt: Date;
 }
+
+/**
+ * Asset risk data for predictive maintenance dashboard
+ */
+export interface AssetRisk {
+  id: string;
+  assetName: string;              // e.g., "HVAC Unit 3A"
+  assetType: string;              // e.g., "hvac", "elevator", "plumbing"
+  buildingId: string;
+  buildingName: string;
+  unitId?: string;                // Unit identifier if applicable
+  riskLevel: RiskBucket;          // 'low' | 'medium' | 'high'
+  failureProbability: number;     // 0-1 (internal use only)
+  estimatedFailureWindow: string; // Human-readable: "2-4 weeks"
+  contributingFactors: string[];  // Plain-language explanations
+  suggestedActions: string[];
+  estimatedCostIfIgnored?: number;  // Admin/Enterprise only (in paisa)
+  lastMaintenanceDate?: Date;
+  nextRecommendedAction?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Building-level health trend for Pro tier (limited access)
+ */
+export interface BuildingHealthTrend {
+  buildingId: string;
+  buildingName: string;
+  trendDirection: 'improving' | 'stable' | 'declining';
+  narrativeInsight: string;       // "Overall maintenance health is improving..."
+  issueCountChange?: number;      // Percentage change from last period
+  lastUpdated: Date;
+}
+
+/**
+ * Access level for predictor module
+ */
+export type PredictorAccessLevel = 'full' | 'limited' | 'none';
+
 
 /**
  * Announcement type - system-wide or building-specific
