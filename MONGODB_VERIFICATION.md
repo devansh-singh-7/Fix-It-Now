@@ -91,10 +91,12 @@ NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
 
 # MongoDB (Data Storage - REQUIRED)
-MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/fixitnow?retryWrites=true&w=majority
+MONGODB_URI=mongodb+srv://<your-username>:<your-password>@cluster.mongodb.net/fixitnow?retryWrites=true&w=majority
 ```
 
 ⚠️ **Make sure MONGODB_URI is set!** Without it, the app won't be able to store data.
+
+> **⚠️ SECURITY NOTE:** Replace `<your-username>` and `<your-password>` with your actual MongoDB Atlas credentials. Never commit real credentials to version control.
 
 ---
 
