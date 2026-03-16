@@ -15,7 +15,7 @@ interface Notification {
   timestamp: Date;
   read: boolean;
   actionUrl?: string;
-  icon: string;
+  icon?: string;
 }
 
 export default function NotificationsPage() {
@@ -24,6 +24,50 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [userUid, setUserUid] = useState<string | null>(null);
+
+  const renderNotificationIcon = (notification: Notification) => {
+    const iconSource = `${notification.icon || ''} ${notification.type} ${notification.title}`.toLowerCase();
+
+    const iconShellClass = 'w-10 h-10 rounded-lg shrink-0 flex items-center justify-center border';
+
+    if (iconSource.includes('assignment') || iconSource.includes('assigned')) {
+      return (
+        <div className={`${iconShellClass} bg-purple-50 border-purple-200 text-purple-700 dark:bg-purple-900/20 dark:border-purple-800 dark:text-purple-300`}>
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+        </div>
+      );
+    }
+
+    if (iconSource.includes('ticket') || iconSource.includes('issue')) {
+      return (
+        <div className={`${iconShellClass} bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-300`}>
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7a2 2 0 012-2h12a2 2 0 012 2v3a2 2 0 000 4v3a2 2 0 01-2 2H6a2 2 0 01-2-2v-3a2 2 0 000-4V7z" />
+          </svg>
+        </div>
+      );
+    }
+
+    if (iconSource.includes('announcement')) {
+      return (
+        <div className={`${iconShellClass} bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-800 dark:text-green-300`}>
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882A1 1 0 0112.447 5L18 8.5V15l-5.553 3.5A1 1 0 0111 17.618V5.882zM7 10v4m0 0a2 2 0 100 4" />
+          </svg>
+        </div>
+      );
+    }
+
+    return (
+      <div className={`${iconShellClass} bg-gray-50 border-gray-200 text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300`}>
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+        </svg>
+      </div>
+    );
+  };
 
   // Fetch notifications from API
   const fetchNotifications = async (uid: string) => {
@@ -39,7 +83,7 @@ export default function NotificationsPage() {
           timestamp: new Date(n.timestamp || n.createdAt || ''),
           read: n.read,
           actionUrl: n.actionUrl,
-          icon: n.icon || '🔔'
+          icon: n.icon || 'bell'
         })));
       }
     } catch (error) {
@@ -259,7 +303,7 @@ export default function NotificationsPage() {
                   >
                     <div className="flex items-start gap-4">
                       {/* Icon */}
-                      <div className="text-2xl shrink-0">{notification.icon}</div>
+                      {renderNotificationIcon(notification)}
                       
                       {/* Content */}
                       <div className="flex-1 min-w-0">
@@ -331,7 +375,11 @@ export default function NotificationsPage() {
                 animate={{ opacity: 1 }}
                 className="text-center py-16 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800"
               >
-                <div className="text-6xl mb-4">🔔</div>
+                <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 dark:text-gray-400">
+                  <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                </div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                   {filter === 'unread' ? 'No unread notifications' : 'No notifications'}
                 </h3>

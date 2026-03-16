@@ -1,6 +1,6 @@
 /**
  * Database Types
- * 
+ *
  * Type definitions for MongoDB collections.
  * Safe to import in both client and server components.
  */
@@ -10,17 +10,7 @@
  */
 export type UserRole = 'admin' | 'owner' | 'technician' | 'resident';
 
-/**
- * Subscription plan types
- * BASIC = Tier 3, PRO = Tier 2, ENTERPRISE = Tier 1
- */
-export type SubscriptionPlan = 'BASIC' | 'PRO' | 'ENTERPRISE';
 
-/**
- * Subscription tier (1 = Enterprise, 2 = Pro, 3 = Basic)
- * Lower tier number = higher access level
- */
-export type SubscriptionTier = 1 | 2 | 3;
 
 /**
  * Building data structure
@@ -29,8 +19,8 @@ export interface Building {
   id: string;
   name: string;
   address: string;
-  state?: string;           // optional state/region
-  area?: string;            // optional area/district
+  state?: string;           // optional state/province
+  area?: string;            // optional city/area
   joinCode: string;         // unique join code in format ABC-123-XYZ
   adminId: string;          // user who created this building
   isActive: boolean;        // building active status
@@ -42,19 +32,16 @@ export interface Building {
  * User profile data stored in MongoDB
  */
 export interface UserProfile {
-  uid: string;              // Firebase Auth UID
+  uid: string; // Firebase Auth UID
   name: string;
-  email: string;            // unique
-  passwordHash?: string;    // bcrypt hash (optional, for custom auth if needed)
+  email: string; // unique
+  passwordHash?: string; // bcrypt hash (optional, for custom auth if needed)
   phoneNumber?: string;
   role: UserRole;
-  buildingId?: string;      // null for platform super admin
+  buildingId?: string; // null for platform super admin
   buildingName?: string;
-  awaitApproval?: boolean;  // true for technicians pending approval
+  awaitApproval?: boolean; // true for technicians pending approval
   isActive: boolean;
-  // Subscription info
-  subscriptionPlan?: SubscriptionPlan;  // BASIC, PRO, or ENTERPRISE
-  subscriptionTier?: SubscriptionTier;  // 1=Enterprise, 2=Pro, 3=Basic
   createdAt: Date;
   updatedAt: Date;
 }
@@ -90,8 +77,8 @@ export type TicketStatus = 'open' | 'assigned' | 'accepted' | 'in_progress' | 'c
 export interface TimelineEvent {
   status: TicketStatus;
   timestamp: Date;
-  by: string;               // user ID who caused the change
-  userName?: string;        // optional user name for display
+  by: string; // user ID who caused the change
+  userName?: string; // optional user name for display
   note?: string;
 }
 
@@ -115,9 +102,9 @@ export interface TicketComment {
 export interface Ticket {
   id: string;
   buildingId: string;
-  createdBy: string;        // resident user id
+  createdBy: string; // resident user id
   createdByName: string;
-  assignedTo?: string;      // technician user id
+  assignedTo?: string; // technician user id
   assignedToName?: string;
   title: string;
   description: string;
@@ -126,9 +113,11 @@ export interface Ticket {
   status: TicketStatus;
   location: string;
   contactPhone?: string;
-  imageUrl?: string;        // primary image URL
-  imageUrls?: string[];     // multiple image URLs
-  imagePublicIds?: string[];  // Cloudinary public_ids for deletion
+  imageUrl?: string; // primary image URL
+  imageUrls?: string[]; // multiple image URLs
+  imagePublicIds?: string[]; // Cloudinary public_ids for deletion
+  completionImageUrls?: string[]; // proof images when ticket is marked complete
+  completionImagePublicIds?: string[]; // Cloudinary public_ids for completion proof images
   aiCategory?: TicketCategory; // from MobileNetV2 or other AI model
 
   // Timeline tracking
@@ -157,11 +146,10 @@ export interface Invoice {
   id: string;
   ticketId: string;
   buildingId: string;
-  userId: string;           // resident user id
+  userId: string; // resident user id
   amount: number;
-  currency: string;         // e.g., "INR", "USD"
+  currency: string; // e.g., "INR", "USD"
   status: InvoiceStatus;
-  stripeSessionId?: string; // Stripe checkout session ID
   description: string;
   createdAt: Date;
   updatedAt: Date;
@@ -192,7 +180,7 @@ export interface PredictionResult {
 export interface Prediction {
   id: string;
   buildingId: string;
-  ticketId?: string;        // null for general building predictions
+  ticketId?: string; // null for general building predictions
   model: MLModel;
   inputFeatures: Record<string, unknown>; // anonymized features
   prediction: PredictionResult;
@@ -200,26 +188,27 @@ export interface Prediction {
 }
 
 /**
- * Maintenance categories used for maintenance logging and ML feedback
+ * Predictor Access Level
  */
-export type MaintenanceType =
-  | 'HVAC'
-  | 'Plumbing'
-  | 'Electrical'
-  | 'Elevator'
-  | 'General';
+export type PredictorAccessLevel = 'full' | 'limited' | 'none';
 
 /**
- * Maintenance log data structure
+ * Asset Risk data structure for predictions
  */
-export interface MaintenanceLog {
-  _id: string;
+export interface AssetRisk {
+  id: string;
   buildingId: string;
-  maintenanceType: MaintenanceType;
-  actionTaken: string;
-  dateCompleted: Date;
-  cost?: number;
-  notes: string;
+  buildingName: string;
+  assetName: string;
+  assetType: string;
+  riskLevel: RiskBucket;
+  estimatedFailureWindow: string;
+  contributingFactors: string[];
+  suggestedActions?: string[];
+  estimatedCostIfIgnored?: number;
+  lastMaintenanceDate?: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 /**
@@ -240,8 +229,8 @@ export type AnnouncementPriority = 'info' | 'warning' | 'urgent';
 export interface Announcement {
   id: string;
   type: AnnouncementType;
-  buildingId?: string;        // null/undefined for system announcements
-  buildingName?: string;      // for display purposes
+  buildingId?: string; // null/undefined for system announcements
+  buildingName?: string; // for display purposes
   title: string;
   content: string;
   priority: AnnouncementPriority;
@@ -254,44 +243,24 @@ export interface Announcement {
 }
 
 /**
- * Predictor access level
+ * Maintenance types
  */
-export type PredictorAccessLevel = 'full' | 'limited' | 'none';
+export type MaintenanceType = 'HVAC' | 'Plumbing' | 'Electrical' | 'Elevator' | 'General';
 
 /**
- * Risk level type (alias for RiskBucket used in predictor components)
+ * Maintenance log data structure
  */
-export type RiskLevel = 'low' | 'medium' | 'high';
-
-/**
- * Asset risk data from the AI predictor
- */
-export interface AssetRisk {
+export interface MaintenanceLog {
   id: string;
-  assetType: string;
-  assetName: string;
-  riskLevel: RiskLevel;
-  failureProbability: number;
-  estimatedFailureWindow: string;
-  contributingFactors: string[];
-  recommendedActions: string[];
-  suggestedActions?: string[];
-  lastMaintenanceDate?: Date;
-  costImpact?: number;
-  estimatedCostIfIgnored?: number;
-  buildingName?: string;
-  createdAt?: Date;
-  updatedAt?: Date;
-}
-
-/**
- * Building health trend data
- */
-export interface BuildingHealthTrend {
   buildingId: string;
-  buildingName: string;
-  trendDirection: 'improving' | 'stable' | 'declining';
-  narrativeInsight: string;
-  issueCountChange: number;
-  lastUpdated: Date;
+  assetName?: string;
+  assetType?: 'hvac' | 'electrical' | 'plumbing' | 'elevator' | 'security' | 'appliance';
+  maintenanceType: MaintenanceType;
+  actionTaken: string;
+  dateCompleted: Date;
+  cost?: number;
+  notes: string;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
 }

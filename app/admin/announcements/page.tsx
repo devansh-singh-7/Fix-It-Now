@@ -344,7 +344,7 @@ export default function AdminAnnouncementsPage() {
                                         <div className="flex-1">
                                             <div className="flex items-center gap-2 mb-2">
                                                 <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getTypeBadge(announcement.type)}`}>
-                                                    {announcement.type === 'system' ? '🌐 System' : '🏢 Building'}
+                                                    {announcement.type === 'system' ? 'System' : 'Building'}
                                                 </span>
                                                 <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(announcement.priority)}`}>
                                                     {announcement.priority.charAt(0).toUpperCase() + announcement.priority.slice(1)}
@@ -477,8 +477,8 @@ export default function AdminAnnouncementsPage() {
                                                 onChange={(e) => setFormData({ ...formData, type: e.target.value as AnnouncementType })}
                                                 className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-900 dark:text-white"
                                             >
-                                                <option value="system">🌐 System-wide</option>
-                                                <option value="building">🏢 Building-specific</option>
+                                                <option value="system">System-wide</option>
+                                                <option value="building">Building-specific</option>
                                             </select>
                                         </div>
 
@@ -491,9 +491,9 @@ export default function AdminAnnouncementsPage() {
                                                 onChange={(e) => setFormData({ ...formData, priority: e.target.value as AnnouncementPriority })}
                                                 className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-900 dark:text-white"
                                             >
-                                                <option value="info">ℹ️ Info</option>
-                                                <option value="warning">⚠️ Warning</option>
-                                                <option value="urgent">🚨 Urgent</option>
+                                                <option value="info">Info</option>
+                                                <option value="warning">Warning</option>
+                                                <option value="urgent">Urgent</option>
                                             </select>
                                         </div>
                                     </div>

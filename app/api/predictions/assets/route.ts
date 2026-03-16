@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDatabase } from '@/app/lib/mongodb';
-import { requireBuildingAdminAccess } from '@/app/lib/server-auth';
+import { requireBuildingAccess } from '@/app/lib/server-auth';
 
 // FastAPI backend URL
 const FASTAPI_URL = process.env.FASTAPI_URL || 'http://localhost:8000';
@@ -17,6 +17,14 @@ const ASSET_NAMES: Record<string, string[]> = {
   security: ['CCTV System', 'Access Control', 'Fire Alarm Panel', 'Intercom System'],
   appliance: ['Washing Machine', 'Dryer', 'Refrigerator', 'Dishwasher', 'Ice Machine'],
 };
+
+function normalizeAssetType(rawType: unknown): (typeof ASSET_TYPES)[number] | null {
+  if (!rawType || typeof rawType !== 'string') return null;
+  const normalized = rawType.trim().toLowerCase();
+  return ASSET_TYPES.includes(normalized as (typeof ASSET_TYPES)[number])
+    ? (normalized as (typeof ASSET_TYPES)[number])
+    : null;
+}
 
 interface AssetFeatures {
   asset_type: string;
@@ -231,7 +239,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const authResult = await requireBuildingAdminAccess(request, buildingId);
+    const authResult = await requireBuildingAccess(request, buildingId);
     if (!authResult.ok) {
       return authResult.response;
     }
@@ -264,6 +272,14 @@ export async function GET(request: Request) {
       .limit(200)
       .toArray();
 
+    // Get maintenance/service entries entered by admin/owner.
+    const maintenanceLogs = await db
+      .collection('maintenance_logs')
+      .find({ buildingId })
+      .sort({ dateCompleted: -1 })
+      .limit(1000)
+      .toArray();
+
     // Group tickets by category
     const ticketsByCategory: Record<string, typeof tickets> = {};
     for (const ticket of tickets) {
@@ -288,120 +304,129 @@ export async function GET(request: Request) {
     }
 
 
-    for (const assetType of ASSET_TYPES) {
-      const categoryTickets = ticketsByCategory[assetType] || [];
-      const names = ASSET_NAMES[assetType] || ['Asset'];
-      
-      // Generate at least 2-3 assets per type for diversity
-      const assetCount = Math.max(2, Math.min(names.length, 1 + Math.floor(categoryTickets.length / 3)));
-      
-      for (let i = 0; i < assetCount; i++) {
-        const assetName = `${names[i % names.length]} ${String.fromCharCode(65 + i)}`;
-        
-        const relevantTickets = categoryTickets.filter((_, idx) => idx % assetCount === i);
-        const lastTicket = relevantTickets[0];
-        
-        // Create diverse risk profiles by varying maintenance patterns
-        // Intentionally create a mix of well-maintained, moderately maintained, and poorly maintained assets
-        let daysSinceLast: number;
-        let assetAgeVariation: number;
-        let targetRiskLevel: 'high' | 'medium' | 'low';
-        
-        // Distribute assets across risk levels for diversity
-        if (i % 3 === 0) {
-          // High risk: Old assets with poor maintenance
-          targetRiskLevel = 'high';
-          daysSinceLast = lastTicket 
-            ? Math.floor((now - new Date(lastTicket.createdAt).getTime()) / (1000 * 60 * 60 * 24))
-            : 200 + Math.floor(Math.random() * 80); // 200-280 days
-          assetAgeVariation = 80 + Math.floor(Math.random() * 60); // Older assets
-        } else if (i % 3 === 1) {
-          // Medium risk: Moderate age and maintenance
-          targetRiskLevel = 'medium';
-          daysSinceLast = lastTicket 
-            ? Math.floor((now - new Date(lastTicket.createdAt).getTime()) / (1000 * 60 * 60 * 24))
-            : 100 + Math.floor(Math.random() * 60); // 100-160 days
-          assetAgeVariation = 40 + Math.floor(Math.random() * 40); // Medium age
-        } else {
-          // Low risk: Well-maintained newer assets
-          targetRiskLevel = 'low';
-          daysSinceLast = lastTicket 
-            ? Math.floor((now - new Date(lastTicket.createdAt).getTime()) / (1000 * 60 * 60 * 24))
-            : 30 + Math.floor(Math.random() * 50); // 30-80 days
-          assetAgeVariation = Math.floor(Math.random() * 30); // Newer assets
-        }
+    const maintenanceEntriesByAsset = new Map<
+      string,
+      {
+        assetName: string;
+        assetType: (typeof ASSET_TYPES)[number];
+        logs: typeof maintenanceLogs;
+      }
+    >();
 
-        const recentHighPriority = relevantTickets.filter(t => 
-          t.priority === 'high' || t.priority === 'urgent'
-        ).length;
-        
-        // Adjust severity based on target risk level
-        let severity: string;
-        if (targetRiskLevel === 'high') {
-          severity = recentHighPriority >= 1 ? 'major' : 'moderate';
-        } else if (targetRiskLevel === 'medium') {
-          severity = relevantTickets.length > 0 ? 'moderate' : 'minor';
-        } else {
-          severity = relevantTickets.length > 0 ? 'minor' : 'none';
-        }
+    for (const log of maintenanceLogs) {
+      const assetType = normalizeAssetType(log.assetType);
+      const assetName = typeof log.assetName === 'string' ? log.assetName.trim() : '';
 
-        // Build features with intentional diversity
-        const features: AssetFeatures = {
-          asset_type: assetType,
-          asset_age_months: buildingAge + assetAgeVariation,
-          days_since_last_maintenance: daysSinceLast,
-          total_maintenance_count: targetRiskLevel === 'high' 
-            ? Math.max(relevantTickets.length, Math.floor(buildingAge / 4)) // More frequent repairs = higher risk
-            : relevantTickets.length,
-          avg_monthly_usage_hours: assetType === 'elevator' ? 500 : assetType === 'hvac' ? 400 : 200,
-          last_repair_severity: severity,
-          ambient_temperature_avg: targetRiskLevel === 'high' 
-            ? 35 + Math.random() * 8 // Higher temps for high risk
-            : 28 + Math.random() * 10,
-          humidity_level_avg: targetRiskLevel === 'high'
-            ? 70 + Math.random() * 20 // Higher humidity for high risk
-            : 50 + Math.random() * 30,
-          power_outage_events_last_year: targetRiskLevel === 'high'
-            ? Math.floor(5 + Math.random() * 5) // More outages
-            : Math.floor(Math.random() * 4),
-          manufacturer_rating: targetRiskLevel === 'low' 
-            ? 3 + Math.floor(Math.random() * 2) // Better rating for low risk
-            : 2 + Math.floor(Math.random() * 2),
-          installation_quality: targetRiskLevel === 'high'
-            ? ['poor', 'average'][Math.floor(Math.random() * 2)]
-            : targetRiskLevel === 'medium'
-            ? ['average', 'good'][Math.floor(Math.random() * 2)]
-            : ['good', 'excellent'][Math.floor(Math.random() * 2)],
-          building_age_years: Math.floor(buildingAge / 12),
-          seasonal_load_factor: 0.9 + Math.random() * 0.3,
-        };
+      if (!assetType || !assetName) continue;
 
-        // Get prediction from FastAPI or fallback
-        let prediction: FastAPIPrediction;
-        if (fastApiAvailable) {
-          const fastApiResult = await callFastAPI(features);
-          prediction = fastApiResult || fallbackPrediction(features);
-        } else {
-          prediction = fallbackPrediction(features);
-        }
-
-        assetRisks.push({
-          id: `${buildingId}-${assetType}-${i}`,
+      const key = `${assetType}:${assetName.toLowerCase()}`;
+      const existing = maintenanceEntriesByAsset.get(key);
+      if (existing) {
+        existing.logs.push(log);
+      } else {
+        maintenanceEntriesByAsset.set(key, {
           assetName,
           assetType,
-          buildingId,
-          buildingName,
-          riskLevel: prediction.risk_level,
-          failureProbability: Math.round(prediction.failure_probability * 100) / 100,
-          estimatedFailureWindow: formatFailureWindow(prediction.estimated_days_to_failure),
-          contributingFactors: prediction.contributing_factors,
-          suggestedActions: prediction.suggested_actions,
-          estimatedCostIfIgnored: prediction.estimated_cost_if_ignored,
-          lastMaintenanceDate: lastTicket ? new Date(lastTicket.completedAt || lastTicket.createdAt) : undefined,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          logs: [log],
         });
       }
+    }
+
+    if (maintenanceEntriesByAsset.size === 0) {
+      return NextResponse.json({
+        success: true,
+        buildingId,
+        buildingName,
+        totalAssets: 0,
+        fastApiUsed: fastApiAvailable,
+        requiresServiceEntries: true,
+        message:
+          'No service entries found. Add maintenance/service entries from Building Details to generate predictions.',
+        riskSummary: {
+          high: 0,
+          medium: 0,
+          low: 0,
+        },
+        assets: [],
+      });
+    }
+
+    let entryIndex = 0;
+    for (const entry of maintenanceEntriesByAsset.values()) {
+      entryIndex += 1;
+
+      const categoryTickets = ticketsByCategory[entry.assetType] || [];
+      const relevantTickets = categoryTickets.filter((ticket) => {
+        const combined = `${ticket.title || ''} ${ticket.description || ''} ${ticket.location || ''}`.toLowerCase();
+        return combined.includes(entry.assetName.toLowerCase());
+      });
+
+      const logsSorted = [...entry.logs].sort(
+        (a, b) => new Date(b.dateCompleted).getTime() - new Date(a.dateCompleted).getTime()
+      );
+      const latestLog = logsSorted[0];
+      const latestServiceDate = latestLog?.dateCompleted ? new Date(latestLog.dateCompleted) : new Date();
+      const daysSinceLast = Math.max(
+        1,
+        Math.floor((now - latestServiceDate.getTime()) / (1000 * 60 * 60 * 24))
+      );
+
+      const serviceText = `${latestLog?.actionTaken || ''} ${latestLog?.notes || ''}`.toLowerCase();
+      let severity = 'minor';
+      if (/replace|failure|critical|urgent/.test(serviceText)) {
+        severity = 'major';
+      } else if (/repair|leak|fault|issue/.test(serviceText)) {
+        severity = 'moderate';
+      }
+
+      const features: AssetFeatures = {
+        asset_type: entry.assetType,
+        asset_age_months: Math.max(12, buildingAge + Math.min(entry.logs.length * 4, 60)),
+        days_since_last_maintenance: daysSinceLast,
+        total_maintenance_count: entry.logs.length,
+        avg_monthly_usage_hours:
+          entry.assetType === 'elevator' ? 500 : entry.assetType === 'hvac' ? 400 : 220,
+        last_repair_severity: severity,
+        ambient_temperature_avg: 28 + Math.random() * 8,
+        humidity_level_avg: 50 + Math.random() * 25,
+        power_outage_events_last_year: Math.floor(Math.random() * 5),
+        manufacturer_rating: 2 + Math.floor(Math.random() * 3),
+        installation_quality: ['average', 'good', 'excellent'][Math.floor(Math.random() * 3)],
+        building_age_years: Math.max(1, Math.floor(buildingAge / 12)),
+        seasonal_load_factor: 0.9 + Math.random() * 0.25,
+      };
+
+      let prediction: FastAPIPrediction;
+      if (fastApiAvailable) {
+        const fastApiResult = await callFastAPI(features);
+        prediction = fastApiResult || fallbackPrediction(features);
+      } else {
+        prediction = fallbackPrediction(features);
+      }
+
+      if (relevantTickets.length > 0) {
+        prediction.contributing_factors = [
+          `${relevantTickets.length} recent tickets reference this asset`,
+          ...prediction.contributing_factors,
+        ];
+      }
+
+      assetRisks.push({
+        id: `${buildingId}-${entry.assetType}-${entryIndex}`,
+        assetName: entry.assetName,
+        assetType: entry.assetType,
+        buildingId,
+        buildingName,
+        riskLevel: prediction.risk_level,
+        failureProbability: Math.round(prediction.failure_probability * 100) / 100,
+        estimatedFailureWindow: formatFailureWindow(prediction.estimated_days_to_failure),
+        contributingFactors: prediction.contributing_factors,
+        suggestedActions: prediction.suggested_actions,
+        estimatedCostIfIgnored: prediction.estimated_cost_if_ignored,
+        lastMaintenanceDate: latestServiceDate,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
     }
 
     // Sort by risk level (high first)

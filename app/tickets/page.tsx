@@ -18,7 +18,7 @@
  * - Create new tickets
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
@@ -56,6 +56,12 @@ export default function TicketsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Building filter for admins
+  const [buildings, setBuildings] = useState<Array<{ id: string; name: string; address: string }>>(
+    []
+  );
+  const [selectedBuildingFilter, setSelectedBuildingFilter] = useState<string>('all');
+
   // Technicians (for admin assignment)
   const [technicians, setTechnicians] = useState<UserProfile[]>([]);
 
@@ -73,6 +79,31 @@ export default function TicketsPage() {
   const [commentLoading, setCommentLoading] = useState(false);
   const [ticketComments, setTicketComments] = useState<TicketComment[]>([]);
 
+  // Completion proof state (used in View modal)
+  const [completionWorkFile, setCompletionWorkFile] = useState<File | null>(null);
+  const [completionWorkPreview, setCompletionWorkPreview] = useState<string | null>(null);
+  const [completionWorkImageUrl, setCompletionWorkImageUrl] = useState<string | null>(null);
+  const [completionWorkPublicId, setCompletionWorkPublicId] = useState<string | null>(null);
+  const [uploadingCompletionImage, setUploadingCompletionImage] = useState(false);
+  const [finishingTicket, setFinishingTicket] = useState(false);
+
+  const resetCompletionState = () => {
+    setCompletionWorkFile(null);
+    setCompletionWorkPreview(null);
+    setCompletionWorkImageUrl(null);
+    setCompletionWorkPublicId(null);
+    setUploadingCompletionImage(false);
+    setFinishingTicket(false);
+  };
+
+  const closeDetailsModal = () => {
+    setShowDetailsModal(false);
+    setSelectedTicket(null);
+    setTicketComments([]);
+    setNewComment('');
+    resetCompletionState();
+  };
+
   // Load user data and tickets
   useEffect(() => {
     if (!auth) return;
@@ -87,12 +118,13 @@ export default function TicketsPage() {
         setUserId(user.uid);
         setUserName(user.displayName || user.email || 'User');
 
-        // Get user role and building
-        const roleRes = await fetch(`/api/users/role?uid=${user.uid}`);
-        const roleData = await roleRes.json();
+        // Parallel API calls for better performance
+        const [roleRes, buildingRes] = await Promise.all([
+          fetch(`/api/users/role?uid=${user.uid}`),
+          fetch(`/api/users/building-id?uid=${user.uid}`),
+        ]);
 
-        const buildingRes = await fetch(`/api/users/building-id?uid=${user.uid}`);
-        const buildingData = await buildingRes.json();
+        const [roleData, buildingData] = await Promise.all([roleRes.json(), buildingRes.json()]);
 
         if (!roleData.success) {
           setError('User profile not found. Please contact support.');
@@ -107,13 +139,7 @@ export default function TicketsPage() {
         setUserRole(role);
         setBuildingId(building);
 
-        console.log('[Tickets Debug] Fetching tickets with:', {
-          uid: user.uid,
-          role,
-          buildingId: building,
-        });
-
-        // Load tickets based on role - use URLSearchParams like dashboard
+        // Build params for tickets query
         const params = new URLSearchParams({
           uid: user.uid,
           role: role,
@@ -122,28 +148,48 @@ export default function TicketsPage() {
           params.append('buildingId', building);
         }
 
-        const ticketsRes = await fetch(`/api/tickets/list?${params.toString()}`);
-        const ticketsData = await ticketsRes.json();
+        // Fetch tickets and optional data in parallel
+        const fetchPromises: Promise<Response>[] = [
+          fetch(`/api/tickets/list?${params.toString()}`, { cache: 'no-store' }),
+        ];
 
-        console.log('[Tickets Debug] API Response:', ticketsData);
-
-        if (ticketsData.success) {
-          // Normalize tickets for consistent UI display
-          const normalized = normalizeTickets(ticketsData.data);
-          console.log('[Tickets Debug] Setting', normalized.length, 'normalized tickets');
-          setTickets(normalized);
-        } else {
-          console.log('[Tickets Debug] API returned error:', ticketsData.error);
+        // Add technicians fetch for admin/owner
+        if (role === 'admin' || role === 'owner') {
+          if (role === 'admin') {
+            // Admin can fetch all technicians when no specific building is selected
+            const technicianUrl = building
+              ? `/api/technicians/list?buildingId=${building}`
+              : '/api/technicians/list';
+            fetchPromises.push(fetch(technicianUrl));
+          } else if (building) {
+            // Owners are always scoped to their own building
+            fetchPromises.push(fetch(`/api/technicians/list?buildingId=${building}`));
+          }
+          if (role === 'admin') {
+            fetchPromises.push(
+              fetch('/api/buildings/list', {
+                headers: { 'x-user-id': user.uid },
+              })
+            );
+          }
         }
 
-        // Load technicians if admin
-        if (role === 'admin') {
-          const techsRes = await fetch(`/api/technicians/list?buildingId=${building}`);
-          const techsData = await techsRes.json();
+        const responses = await Promise.all(fetchPromises);
+        const [ticketsData, ...optionalData] = await Promise.all(responses.map((r) => r.json()));
 
-          if (techsData.success) {
-            setTechnicians(techsData.data);
-          }
+        if (ticketsData.success) {
+          const normalized = normalizeTickets(ticketsData.data);
+          setTickets(normalized);
+        } else {
+          setError(ticketsData.error || 'Failed to load tickets');
+        }
+
+        // Process optional data
+        if (optionalData.length > 0 && optionalData[0]?.success) {
+          setTechnicians(optionalData[0].data || []);
+        }
+        if (optionalData.length > 1 && optionalData[1]?.success) {
+          setBuildings(optionalData[1].data || []);
         }
       } catch (err) {
         console.error('Error loading tickets:', err);
@@ -156,40 +202,119 @@ export default function TicketsPage() {
     return () => unsubscribe();
   }, [router]);
 
-  // Real-time polling for tickets - refresh every 15 seconds
+  // Fetch all buildings for admin filter
   useEffect(() => {
-    if (!userId || !userRole) return;
+    if (!userId || !userRole || userRole !== 'admin') {
+      return;
+    }
 
-    const fetchTickets = async () => {
+    const fetchBuildings = async () => {
       try {
-        // Use URLSearchParams like dashboard for consistent filtering
-        const params = new URLSearchParams({
-          uid: userId,
-          role: userRole,
+        const response = await fetch('/api/buildings/list', {
+          headers: {
+            'x-user-id': userId,
+          },
         });
-        if (buildingId && buildingId !== 'null' && buildingId !== 'undefined') {
-          params.append('buildingId', buildingId);
-        }
+        const data = await response.json();
 
-        const ticketsRes = await fetch(`/api/tickets/list?${params.toString()}`);
-        const ticketsData = await ticketsRes.json();
-
-        if (ticketsData.success) {
-          setTickets(normalizeTickets(ticketsData.data));
-          console.log('[Tickets Real-time] Updated', ticketsData.data.length, 'tickets');
+        if (data.success && data.data) {
+          setBuildings(data.data);
+          console.log('[Tickets] Loaded', data.data.length, 'buildings for filter');
         }
-      } catch (err) {
-        console.error('[Tickets Real-time] Error fetching tickets:', err);
+      } catch (error) {
+        console.error('[Tickets] Error fetching buildings:', error);
       }
     };
 
-    // Set up polling interval - refresh every 15 seconds
-    const interval = setInterval(() => {
-      fetchTickets();
-    }, 15000);
+    fetchBuildings();
+  }, [userId, userRole]);
 
-    return () => clearInterval(interval);
+  // Update buildingId when filter changes
+  useEffect(() => {
+    if (userRole !== 'admin') {
+      return;
+    }
+
+    if (selectedBuildingFilter === 'all') {
+      setBuildingId(null); // Show all tickets from all buildings
+    } else {
+      setBuildingId(selectedBuildingFilter); // Show tickets from selected building only
+    }
+  }, [selectedBuildingFilter, userRole]);
+
+  // Reload technicians when building filter changes
+  useEffect(() => {
+    if (!userId || !userRole || (userRole !== 'admin' && userRole !== 'owner')) {
+      return;
+    }
+
+    const loadTechnicians = async () => {
+      try {
+        // Use the selected building filter or current buildingId
+        const targetBuildingId =
+          selectedBuildingFilter !== 'all' ? selectedBuildingFilter : buildingId;
+
+        // Admin can fetch all technicians in "all buildings" mode.
+        // Owners must remain scoped to their assigned building.
+        if (userRole === 'owner' && !targetBuildingId) {
+          console.log('[Tickets] No building ID for owner technician fetch');
+          setTechnicians([]);
+          return;
+        }
+
+        const technicianUrl = targetBuildingId
+          ? `/api/technicians/list?buildingId=${targetBuildingId}`
+          : '/api/technicians/list';
+
+        const techsRes = await fetch(technicianUrl);
+        const techsData = await techsRes.json();
+
+        if (techsData.success) {
+          setTechnicians(techsData.data);
+          console.log('[Tickets] Loaded', techsData.data.length, 'technicians for building');
+        }
+      } catch (error) {
+        console.error('[Tickets] Error loading technicians:', error);
+        setTechnicians([]);
+      }
+    };
+
+    loadTechnicians();
+  }, [userId, userRole, buildingId, selectedBuildingFilter]);
+
+  // Memoized fetch function to avoid recreating on every render
+  const fetchTicketsPolling = useCallback(async () => {
+    if (!userId || !userRole) return;
+
+    try {
+      const params = new URLSearchParams({
+        uid: userId,
+        role: userRole,
+      });
+      if (buildingId && buildingId !== 'null' && buildingId !== 'undefined') {
+        params.append('buildingId', buildingId);
+      }
+
+      const ticketsRes = await fetch(`/api/tickets/list?${params.toString()}`, {
+        cache: 'no-store',
+      });
+      const ticketsData = await ticketsRes.json();
+
+      if (ticketsData.success) {
+        setTickets(normalizeTickets(ticketsData.data));
+      }
+    } catch (err) {
+      console.error('[Tickets Real-time] Error fetching tickets:', err);
+    }
   }, [userId, userRole, buildingId]);
+
+  // Real-time polling - reduced to 30 seconds for better performance
+  useEffect(() => {
+    if (!userId || !userRole) return;
+
+    const interval = setInterval(fetchTicketsPolling, 30000);
+    return () => clearInterval(interval);
+  }, [userId, userRole, fetchTicketsPolling]);
 
   const handleStatusChange = async (ticketId: string, newStatus: TicketStatus) => {
     if (!userId || !userName) return;
@@ -214,22 +339,121 @@ export default function TicketsPage() {
         return;
       }
 
-      // Reload tickets using URLSearchParams
-      if (userId && userRole) {
-        const params = new URLSearchParams({ uid: userId, role: userRole });
-        if (buildingId && buildingId !== 'null' && buildingId !== 'undefined') {
-          params.append('buildingId', buildingId);
-        }
-        const ticketsRes = await fetch(`/api/tickets/list?${params.toString()}`);
-        const ticketsData = await ticketsRes.json();
-
-        if (ticketsData.success) {
-          setTickets(normalizeTickets(ticketsData.data));
-        }
-      }
+      // Reload tickets using the shared function
+      await fetchTicketsPolling();
     } catch (err) {
       console.error('Error updating status:', err);
       setError('Failed to update ticket status');
+    }
+  };
+
+  const handleCompletionFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+
+    if (!file) {
+      setCompletionWorkFile(null);
+      setCompletionWorkPreview(null);
+      setCompletionWorkImageUrl(null);
+      setCompletionWorkPublicId(null);
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setError('Please select a valid image file');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Completion image must be under 5MB');
+      return;
+    }
+
+    setCompletionWorkFile(file);
+    setCompletionWorkImageUrl(null);
+    setCompletionWorkPublicId(null);
+    setCompletionWorkPreview(URL.createObjectURL(file));
+  };
+
+  const uploadCompletionImageIfNeeded = async () => {
+    if (completionWorkImageUrl) {
+      return {
+        secureUrl: completionWorkImageUrl,
+        publicId: completionWorkPublicId,
+      };
+    }
+
+    if (!completionWorkFile) {
+      return null;
+    }
+
+    setUploadingCompletionImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', completionWorkFile);
+
+      const uploadRes = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const uploadData = await uploadRes.json();
+
+      if (!uploadData.success || !uploadData.data?.secure_url) {
+        throw new Error(uploadData.error || 'Failed to upload completion image');
+      }
+
+      const secureUrl = String(uploadData.data.secure_url);
+      const publicId = uploadData.data.public_id ? String(uploadData.data.public_id) : null;
+
+      setCompletionWorkImageUrl(secureUrl);
+      setCompletionWorkPublicId(publicId);
+
+      return { secureUrl, publicId };
+    } finally {
+      setUploadingCompletionImage(false);
+    }
+  };
+
+  const handleFinishTicket = async () => {
+    if (!selectedTicket || !userId || !userName || !userRole) return;
+
+    setError('');
+    setFinishingTicket(true);
+    try {
+      const uploaded = await uploadCompletionImageIfNeeded();
+
+      const completionImageUrls = uploaded?.secureUrl
+        ? [uploaded.secureUrl]
+        : selectedTicket.completionImageUrls || [];
+      const completionImagePublicIds = uploaded?.publicId ? [uploaded.publicId] : [];
+
+      const response = await fetch('/api/tickets/update-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticketId: selectedTicket.id,
+          status: 'completed',
+          userId,
+          userName,
+          role: userRole,
+          note: 'Ticket marked complete with work proof image',
+          completionImageUrls,
+          completionImagePublicIds,
+        }),
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        setError(data.error || 'Failed to finish ticket');
+        return;
+      }
+
+      await fetchTicketsPolling();
+      closeDetailsModal();
+    } catch (err) {
+      console.error('Error finishing ticket:', err);
+      setError('Failed to finish ticket');
+    } finally {
+      setFinishingTicket(false);
     }
   };
 
@@ -258,19 +482,8 @@ export default function TicketsPage() {
       setShowAssignModal(false);
       setSelectedTicket(null);
 
-      // Reload tickets using URLSearchParams
-      if (userId && userRole) {
-        const params = new URLSearchParams({ uid: userId, role: userRole });
-        if (buildingId && buildingId !== 'null' && buildingId !== 'undefined') {
-          params.append('buildingId', buildingId);
-        }
-        const ticketsRes = await fetch(`/api/tickets/list?${params.toString()}`);
-        const ticketsData = await ticketsRes.json();
-
-        if (ticketsData.success) {
-          setTickets(normalizeTickets(ticketsData.data));
-        }
-      }
+      // Reload tickets using the shared function
+      await fetchTicketsPolling();
     } catch (err) {
       console.error('Error assigning ticket:', err);
       setError('Failed to assign ticket');
@@ -396,17 +609,7 @@ export default function TicketsPage() {
   // Reload tickets after creating a new one
   const handleTicketCreated = async () => {
     setShowCreateModal(false);
-    if (userId && userRole) {
-      const params = new URLSearchParams({ uid: userId, role: userRole });
-      if (buildingId && buildingId !== 'null' && buildingId !== 'undefined') {
-        params.append('buildingId', buildingId);
-      }
-      const ticketsRes = await fetch(`/api/tickets/list?${params.toString()}`);
-      const ticketsData = await ticketsRes.json();
-      if (ticketsData.success) {
-        setTickets(normalizeTickets(ticketsData.data));
-      }
-    }
+    await fetchTicketsPolling();
   };
 
   // Get valid status options based on current status and user role
@@ -528,19 +731,50 @@ export default function TicketsPage() {
           <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h1 className="text-4xl md:text-5xl font-bold mb-3 text-gray-900 dark:text-white">
-                {userRole === 'admin' && 'All Tickets'}
+                {(userRole === 'admin' || userRole === 'owner') && 'All Tickets'}
                 {userRole === 'technician' && 'My Assigned Tickets'}
                 {userRole === 'resident' && 'My Tickets'}
                 {!userRole && 'Tickets'}
               </h1>
               <p className="text-lg text-gray-600 dark:text-gray-400">
-                {userRole === 'admin' && 'View and manage all tickets for your building'}
+                {(userRole === 'admin' || userRole === 'owner') &&
+                  'View and manage all tickets for your building'}
                 {userRole === 'technician' && 'Tickets assigned to you'}
                 {userRole === 'resident' && 'Track your maintenance requests'}
                 {!userRole && 'Manage your maintenance tickets'}
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Building Filter for Admins */}
+              {userRole === 'admin' && buildings.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <svg
+                    className="w-5 h-5 text-gray-500 dark:text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                    />
+                  </svg>
+                  <select
+                    value={selectedBuildingFilter}
+                    onChange={(e) => setSelectedBuildingFilter(e.target.value)}
+                    className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-gray-400 dark:hover:border-gray-600 transition-colors"
+                  >
+                    <option value="all">All Buildings ({buildings.length})</option>
+                    {buildings.map((building) => (
+                      <option key={building.id} value={building.id}>
+                        {building.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {userRole !== 'technician' && (
                 <button
                   onClick={() => setShowCreateModal(true)}
@@ -573,6 +807,48 @@ export default function TicketsPage() {
               </button>
             </div>
           </div>
+
+          {/* Active Filter Indicator for Admins */}
+          {userRole === 'admin' && buildings.length > 0 && selectedBuildingFilter !== 'all' && (
+            <motion.div
+              initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 px-4 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg inline-flex items-center gap-2"
+            >
+              <svg
+                className="w-4 h-4 text-blue-600 dark:text-blue-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+                />
+              </svg>
+              <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
+                Filtered:{' '}
+                {buildings.find((b) => b.id === selectedBuildingFilter)?.name ||
+                  'Selected Building'}
+              </span>
+              <button
+                onClick={() => setSelectedBuildingFilter('all')}
+                className="ml-2 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200"
+                title="Clear filter"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </motion.div>
+          )}
 
           {/* Error Message */}
           {error && (
@@ -633,7 +909,8 @@ export default function TicketsPage() {
 
               <h3 className="relative text-xl font-semibold mb-3 text-white">No tickets found</h3>
               <p className="relative text-slate-400 mb-6 max-w-md mx-auto">
-                {userRole === 'admin' && 'No tickets have been created for your building yet.'}
+                {(userRole === 'admin' || userRole === 'owner') &&
+                  'No tickets have been created for your building yet.'}
                 {userRole === 'technician' && 'No tickets have been assigned to you yet.'}
                 {userRole === 'resident' && "You haven't created any tickets yet."}
                 {!userRole && 'Create a new ticket to get started.'}
@@ -684,7 +961,7 @@ export default function TicketsPage() {
                       <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
                         Status
                       </th>
-                      {userRole === 'admin' && (
+                      {(userRole === 'admin' || userRole === 'owner') && (
                         <>
                           <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
                             Created By
@@ -708,8 +985,11 @@ export default function TicketsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700/50">
-                    {tickets.map((ticket) => (
-                      <tr key={ticket.id} className="transition-colors hover:bg-slate-800/30">
+                    {tickets.map((ticket, index) => (
+                      <tr
+                        key={`${ticket.id}-${ticket.createdAt?.toISOString() || 'no-date'}-${index}`}
+                        className="transition-colors hover:bg-slate-800/30"
+                      >
                         <td className="px-6 py-4">
                           <span className="font-mono text-sm text-slate-400">
                             {ticket.displayId}
@@ -735,14 +1015,26 @@ export default function TicketsPage() {
                             {ticket.statusLabel}
                           </span>
                         </td>
-                        {userRole === 'admin' && (
+                        {(userRole === 'admin' || userRole === 'owner') && (
                           <>
                             <td className="px-6 py-4">
                               <span className="text-slate-200">{ticket.createdByName}</span>
                             </td>
                             <td className="px-6 py-4">
                               {ticket.assignedToName !== 'Unassigned' ? (
-                                <span className="text-slate-200">{ticket.assignedToName}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-slate-200">{ticket.assignedToName}</span>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedTicket(ticket);
+                                      setShowAssignModal(true);
+                                    }}
+                                    className="text-xs text-blue-400 hover:text-blue-300 font-medium transition-colors"
+                                    title="Reassign ticket"
+                                  >
+                                    ↻
+                                  </button>
+                                </div>
                               ) : (
                                 <button
                                   onClick={() => {
@@ -833,40 +1125,125 @@ export default function TicketsPage() {
                   shouldReduceMotion ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.95 }
                 }
                 animate={{ opacity: 1, scale: 1 }}
-                className="max-w-md w-full p-6 rounded-xl"
+                className="max-w-lg w-full p-6 rounded-xl"
                 style={{ background: 'var(--card)' }}
               >
                 <h3
-                  className="text-xl font-bold mb-4"
+                  className="text-xl font-bold mb-2"
                   style={{ color: 'var(--card-contrast-text)' }}
                 >
                   Assign Ticket to Technician
                 </h3>
-                <p className="mb-4" style={{ color: 'var(--muted)' }}>
-                  Ticket: {selectedTicket.title}
+                <p className="mb-1 text-sm" style={{ color: 'var(--muted)' }}>
+                  Ticket: <span className="font-medium">{selectedTicket.title}</span>
                 </p>
-                <div className="space-y-2 mb-6">
+                {selectedTicket.assignedToName &&
+                  selectedTicket.assignedToName !== 'Unassigned' && (
+                    <div className="mb-4 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                      <p className="text-sm text-blue-800 dark:text-blue-300">
+                        Currently assigned to:{' '}
+                        <span className="font-semibold">{selectedTicket.assignedToName}</span>
+                      </p>
+                    </div>
+                  )}
+                <div className="space-y-2 mb-6 max-h-96 overflow-y-auto">
                   {technicians.length === 0 ? (
-                    <p style={{ color: 'var(--muted)' }}>No technicians available</p>
-                  ) : (
-                    technicians.map((tech) => (
-                      <button
-                        key={tech.uid}
-                        onClick={() => handleAssignTicket(tech.uid, tech.name)}
-                        className="w-full px-4 py-3 rounded-lg border text-left transition-all hover:opacity-80"
-                        style={{
-                          background: 'var(--card)',
-                          borderColor: 'rgba(15,23,42,0.1)',
-                        }}
+                    <div className="text-center py-8">
+                      <svg
+                        className="w-12 h-12 mx-auto mb-3 text-gray-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
                       >
-                        <p className="font-medium" style={{ color: 'var(--card-contrast-text)' }}>
-                          {tech.name}
-                        </p>
-                        <p className="text-sm" style={{ color: 'var(--muted)' }}>
-                          {tech.email}
-                        </p>
-                      </button>
-                    ))
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                        />
+                      </svg>
+                      <p className="text-gray-600 dark:text-gray-400">No technicians available</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">
+                        Add technicians to this building first
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+                        Available Technicians ({technicians.length})
+                      </p>
+                      {technicians.map((tech) => {
+                        // Check if this tech is currently assigned to this ticket
+                        const isAssignedToThisTicket = selectedTicket.assignedTo === tech.uid;
+                        // Count how many tickets this tech has assigned (from all tickets)
+                        const assignedTicketsCount = tickets.filter(
+                          (t) => t.assignedTo === tech.uid
+                        ).length;
+
+                        return (
+                          <button
+                            key={tech.uid}
+                            onClick={() => handleAssignTicket(tech.uid, tech.name)}
+                            className={`w-full px-4 py-3 rounded-lg border text-left transition-all hover:shadow-md ${
+                              isAssignedToThisTicket
+                                ? 'border-blue-500 dark:border-blue-600 bg-blue-50 dark:bg-blue-900/30'
+                                : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                            }`}
+                            style={{
+                              background: isAssignedToThisTicket ? undefined : 'var(--card)',
+                            }}
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <p
+                                    className="font-medium"
+                                    style={{ color: 'var(--card-contrast-text)' }}
+                                  >
+                                    {tech.name}
+                                  </p>
+                                  {isAssignedToThisTicket && (
+                                    <span className="px-2 py-0.5 bg-blue-600 text-white text-xs rounded-full font-semibold">
+                                      Current
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-sm" style={{ color: 'var(--muted)' }}>
+                                  {tech.email}
+                                </p>
+                                {tech.phoneNumber && (
+                                  <p className="text-xs mt-1 inline-flex items-center gap-1.5" style={{ color: 'var(--muted)' }}>
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h2.28a2 2 0 011.9 1.368l.736 2.207a2 2 0 01-.45 2.047l-1.29 1.291a16.001 16.001 0 006.588 6.588l1.29-1.29a2 2 0 012.048-.45l2.207.735A2 2 0 0121 16.72V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                    </svg>
+                                    {tech.phoneNumber}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex flex-col items-end gap-1">
+                                {assignedTicketsCount > 0 && (
+                                  <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs rounded-md font-medium">
+                                    {assignedTicketsCount} ticket
+                                    {assignedTicketsCount !== 1 ? 's' : ''}
+                                  </span>
+                                )}
+                                {tech.isActive !== false ? (
+                                  <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                                    Active
+                                  </span>
+                                ) : (
+                                  <span className="flex items-center gap-1 text-xs text-gray-500">
+                                    <span className="w-2 h-2 bg-gray-400 rounded-full"></span>
+                                    Inactive
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </>
                   )}
                 </div>
                 <button
@@ -889,29 +1266,46 @@ export default function TicketsPage() {
 
           {/* Ticket Details Modal */}
           {showDetailsModal && selectedTicket && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-md supports-backdrop-filter:bg-slate-900/45 flex items-center justify-center p-4 z-50 overflow-y-auto">
               <motion.div
                 initial={
                   shouldReduceMotion ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.95 }
                 }
                 animate={{ opacity: 1, scale: 1 }}
-                className="max-w-3xl w-full p-6 rounded-xl my-8"
-                style={{ background: 'var(--card)' }}
+                className="max-w-3xl w-full p-6 rounded-2xl my-8 border shadow-2xl text-slate-100"
+                style={{
+                  background: 'rgba(2,6,23,0.96)',
+                  borderColor: 'rgba(71,85,105,0.7)',
+                  backdropFilter: 'blur(14px)',
+                  ['--card' as string]: '#0b1220',
+                  ['--card-contrast-text' as string]: '#e2e8f0',
+                  ['--muted' as string]: '#94a3b8',
+                }}
               >
                 <div className="flex justify-between items-start mb-6">
-                  <h3 className="text-2xl font-bold" style={{ color: 'var(--card-contrast-text)' }}>
-                    Ticket Details
-                  </h3>
                   <button
-                    onClick={() => {
-                      setShowDetailsModal(false);
-                      setSelectedTicket(null);
+                    onClick={closeDetailsModal}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors bg-slate-900/60 hover:bg-slate-800/80"
+                    style={{
+                      color: '#e2e8f0',
+                      borderColor: 'rgba(71,85,105,0.9)',
                     }}
-                    className="text-2xl hover:opacity-70 transition-opacity"
-                    style={{ color: 'var(--muted)' }}
                   >
-                    ×
+                    <span aria-hidden="true">←</span>
+                    Go Back
                   </button>
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-2xl font-bold" style={{ color: 'var(--card-contrast-text)' }}>
+                      Ticket Details
+                    </h3>
+                    <button
+                      onClick={closeDetailsModal}
+                      className="text-2xl hover:opacity-70 transition-opacity text-slate-300"
+                      aria-label="Close"
+                    >
+                      ×
+                    </button>
+                  </div>
                 </div>
 
                 {/* Ticket Info */}
@@ -986,6 +1380,15 @@ export default function TicketsPage() {
                         {selectedTicket.location}
                       </p>
                     </div>
+
+                    <div>
+                      <p className="text-sm font-medium mb-1" style={{ color: 'var(--muted)' }}>
+                        Building
+                      </p>
+                      <p style={{ color: 'var(--card-contrast-text)' }}>
+                        {selectedTicket.buildingName || 'N/A'}
+                      </p>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -1024,7 +1427,7 @@ export default function TicketsPage() {
                   {selectedTicket.imageUrls && selectedTicket.imageUrls.length > 0 && (
                     <div>
                       <p className="text-sm font-medium mb-2" style={{ color: 'var(--muted)' }}>
-                        Images
+                        Issue Images
                       </p>
                       <div className="grid grid-cols-3 gap-2">
                         {selectedTicket.imageUrls.map((url, index) => (
@@ -1038,6 +1441,92 @@ export default function TicketsPage() {
                           </div>
                         ))}
                       </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-sm font-medium mb-1" style={{ color: 'var(--muted)' }}>
+                        Created At
+                      </p>
+                      <p style={{ color: 'var(--card-contrast-text)' }}>
+                        {selectedTicket.createdAt
+                          ? new Date(selectedTicket.createdAt).toLocaleString()
+                          : 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium mb-1" style={{ color: 'var(--muted)' }}>
+                        Last Updated
+                      </p>
+                      <p style={{ color: 'var(--card-contrast-text)' }}>
+                        {selectedTicket.updatedAt
+                          ? new Date(selectedTicket.updatedAt).toLocaleString()
+                          : 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium mb-1" style={{ color: 'var(--muted)' }}>
+                        Completed At
+                      </p>
+                      <p style={{ color: 'var(--card-contrast-text)' }}>
+                        {selectedTicket.completedAt
+                          ? new Date(selectedTicket.completedAt).toLocaleString()
+                          : 'Not completed'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {selectedTicket.completionImageUrls && selectedTicket.completionImageUrls.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium mb-2" style={{ color: 'var(--muted)' }}>
+                        Completed Work Images
+                      </p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        {selectedTicket.completionImageUrls.map((url, index) => (
+                          <div key={index} className="relative w-full h-32">
+                            <Image
+                              src={url}
+                              alt={`Completed work ${index + 1}`}
+                              fill
+                              className="object-cover rounded"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedTicket.status !== 'completed' &&
+                    (userRole === 'technician' || userRole === 'admin') && (
+                    <div className="p-4 rounded-lg border bg-slate-900/70" style={{ borderColor: 'rgba(71,85,105,0.75)' }}>
+                      <p className="text-sm font-medium mb-2" style={{ color: 'var(--card-contrast-text)' }}>
+                        Completion Proof
+                      </p>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleCompletionFileChange}
+                        className="block w-full text-sm text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-emerald-500"
+                      />
+                      <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+                        Upload an image of the completed repair before finishing this ticket.
+                      </p>
+
+                      {completionWorkPreview && (
+                        <div className="relative w-full h-48 mt-3 rounded overflow-hidden border" style={{ borderColor: 'rgba(15,23,42,0.15)' }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={completionWorkPreview} alt="Completion preview" className="w-full h-full object-cover" />
+                        </div>
+                      )}
+
+                      <button
+                        onClick={handleFinishTicket}
+                        disabled={finishingTicket || uploadingCompletionImage}
+                        className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-500 disabled:opacity-50 transition-colors shadow-md"
+                      >
+                        {finishingTicket || uploadingCompletionImage ? 'Finishing...' : 'Finish Ticket'}
+                      </button>
                     </div>
                   )}
 
@@ -1113,7 +1602,17 @@ export default function TicketsPage() {
 
                 {/* Timeline */}
                 <div className="border-t pt-6 mt-6" style={{ borderColor: 'rgba(15,23,42,0.1)' }}>
-                  <TicketTimeline timeline={selectedTicket.timeline || []} />
+                  <details>
+                    <summary
+                      className="cursor-pointer text-sm font-semibold"
+                      style={{ color: 'var(--card-contrast-text)' }}
+                    >
+                      Activity Log ({selectedTicket.timeline?.length || 0})
+                    </summary>
+                    <div className="mt-4">
+                      <TicketTimeline timeline={selectedTicket.timeline || []} />
+                    </div>
+                  </details>
                 </div>
 
                 {/* Comments Section */}
@@ -1155,8 +1654,6 @@ export default function TicketsPage() {
                       </button>
                     </div>
                   </div>
-
-                  {/* Comments List */}
                   <div className="space-y-3 max-h-60 overflow-y-auto">
                     {ticketComments.length === 0 ? (
                       <p className="text-sm text-center py-4" style={{ color: 'var(--muted)' }}>
@@ -1221,20 +1718,15 @@ export default function TicketsPage() {
                 </div>
 
                 <button
-                  onClick={() => {
-                    setShowDetailsModal(false);
-                    setSelectedTicket(null);
-                    setTicketComments([]);
-                    setNewComment('');
-                  }}
-                  className="w-full px-4 py-2 rounded-lg border font-medium transition-all hover:opacity-80 mt-6"
+                  onClick={closeDetailsModal}
+                  className="w-full px-4 py-2 rounded-lg border font-medium transition-all hover:bg-slate-800 mt-6"
                   style={{
-                    background: 'var(--card)',
-                    borderColor: 'rgba(15,23,42,0.1)',
-                    color: 'var(--card-contrast-text)',
+                    background: '#0f172a',
+                    borderColor: 'rgba(71,85,105,0.8)',
+                    color: '#e2e8f0',
                   }}
                 >
-                  Close
+                  Go Back
                 </button>
               </motion.div>
             </div>

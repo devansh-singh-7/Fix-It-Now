@@ -12,8 +12,15 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const buildingId = searchParams.get('buildingId');
 
+    console.log('[Analytics API] Request received:', {
+      buildingId,
+      hasAuth: request.headers.get('authorization') ? 'yes' : 'no'
+    });
+
     // If no buildingId provided, return global analytics across all buildings
-    if (!buildingId) {
+    if (!buildingId || buildingId === 'all') {
+      console.log('[Analytics API] Fetching global analytics for all buildings');
+      
       const [ticketStats, technicianPerformance, predictionSummary, invoiceAnalytics, healthScore] =
         await Promise.all([
           getTicketStatistics(null),
@@ -22,6 +29,12 @@ export async function GET(request: Request) {
           getInvoiceAnalytics(null),
           getBuildingHealthScore(null),
         ]);
+
+      console.log('[Analytics API] Global data fetched:', {
+        tickets: ticketStats.total,
+        technicians: technicianPerformance.length,
+        predictions: predictionSummary.total
+      });
 
       return NextResponse.json({
         success: true,
@@ -38,6 +51,8 @@ export async function GET(request: Request) {
     }
 
     // Fetch all analytics in parallel for specific building
+    console.log('[Analytics API] Fetching analytics for building:', buildingId);
+    
     const [ticketStats, technicianPerformance, predictionSummary, invoiceAnalytics, healthScore] =
       await Promise.all([
         getTicketStatistics(buildingId),
@@ -46,6 +61,13 @@ export async function GET(request: Request) {
         getInvoiceAnalytics(buildingId),
         getBuildingHealthScore(buildingId),
       ]);
+
+    console.log('[Analytics API] Building data fetched:', {
+      buildingId,
+      tickets: ticketStats.total,
+      technicians: technicianPerformance.length,
+      predictions: predictionSummary.total
+    });
 
     return NextResponse.json({
       success: true,
@@ -60,7 +82,7 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
-    console.error('Analytics overview error:', error);
+    console.error('[Analytics API] Error:', error);
     return NextResponse.json(
       {
         success: false,

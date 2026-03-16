@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { Fragment, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
@@ -8,7 +8,7 @@ import { Menu, Transition } from '@headlessui/react';
 import { User } from 'firebase/auth';
 import JoinBuildingBanner from './JoinBuildingBanner';
 
-type UserRole = 'admin' | 'technician' | 'resident';
+type UserRole = 'admin' | 'owner' | 'technician' | 'resident';
 
 interface NavLink {
   name: string;
@@ -24,9 +24,14 @@ const NAV_LINKS: NavLink[] = [
     roles: ['admin', 'technician', 'resident'],
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
+        />
       </svg>
-    )
+    ),
   },
   {
     name: 'Tickets',
@@ -34,9 +39,14 @@ const NAV_LINKS: NavLink[] = [
     roles: ['admin', 'technician', 'resident'],
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+        />
       </svg>
-    )
+    ),
   },
   {
     name: 'Analytics',
@@ -44,9 +54,14 @@ const NAV_LINKS: NavLink[] = [
     roles: ['admin'],
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+        />
       </svg>
-    )
+    ),
   },
   {
     name: 'Technicians',
@@ -54,9 +69,14 @@ const NAV_LINKS: NavLink[] = [
     roles: ['admin', 'technician'],
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+        />
       </svg>
-    )
+    ),
   },
   {
     name: 'Buildings',
@@ -64,9 +84,14 @@ const NAV_LINKS: NavLink[] = [
     roles: ['admin'],
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+        />
       </svg>
-    )
+    ),
   },
   {
     name: 'Reports',
@@ -74,9 +99,14 @@ const NAV_LINKS: NavLink[] = [
     roles: ['admin'],
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+        />
       </svg>
-    )
+    ),
   },
   {
     name: 'Predictions',
@@ -84,9 +114,14 @@ const NAV_LINKS: NavLink[] = [
     roles: ['admin', 'technician', 'resident'],
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+        />
       </svg>
-    )
+    ),
   },
 ];
 
@@ -98,19 +133,46 @@ export default function NavBar() {
   const [hasBuilding, setHasBuilding] = useState(true);
   const [mounted, setMounted] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-  const [notifications, setNotifications] = useState<{
-    id: string;
-    title: string;
-    message: string;
-    timestamp: Date;
-    read: boolean;
-    type: string;
-    actionUrl?: string;
-  }[]>([]);
+  const [notifications, setNotifications] = useState<
+    {
+      id: string;
+      title: string;
+      message: string;
+      timestamp: Date;
+      read: boolean;
+      type: string;
+      actionUrl?: string;
+    }[]
+  >([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  const hasAssignedBuilding = (profile: {
+    role?: UserRole;
+    buildingId?: unknown;
+    buildingName?: unknown;
+  }): boolean => {
+    if (profile.role === 'admin') return true;
+
+    const rawBuildingId = profile.buildingId;
+    const extractedBuildingId =
+      typeof rawBuildingId === 'object' && rawBuildingId !== null
+        ? (rawBuildingId as { buildingId?: unknown; id?: unknown; _id?: unknown }).buildingId ||
+          (rawBuildingId as { buildingId?: unknown; id?: unknown; _id?: unknown }).id ||
+          (rawBuildingId as { buildingId?: unknown; id?: unknown; _id?: unknown })._id ||
+          ''
+        : rawBuildingId;
+
+    const buildingIdString = String(extractedBuildingId ?? '').trim();
+    const hasValidBuildingId =
+      buildingIdString !== '' && buildingIdString !== 'null' && buildingIdString !== 'undefined';
+    const hasBuildingName =
+      typeof profile.buildingName === 'string' && profile.buildingName.trim().length > 0;
+
+    return hasValidBuildingId || hasBuildingName;
+  };
 
   // Fetch notifications from API
   const fetchNotifications = async (uid: string) => {
@@ -118,10 +180,24 @@ export default function NavBar() {
       const response = await fetch(`/api/notifications?uid=${uid}&limit=10`);
       const data = await response.json();
       if (data.success && data.data) {
-        setNotifications(data.data.map((n: { id?: string; type?: string; title?: string; message?: string; timestamp?: string; createdAt?: string; read?: boolean; actionUrl?: string; icon?: string }) => ({
-          ...n,
-          timestamp: new Date(n.timestamp || n.createdAt || '')
-        })));
+        setNotifications(
+          data.data.map(
+            (n: {
+              id?: string;
+              type?: string;
+              title?: string;
+              message?: string;
+              timestamp?: string;
+              createdAt?: string;
+              read?: boolean;
+              actionUrl?: string;
+              icon?: string;
+            }) => ({
+              ...n,
+              timestamp: new Date(n.timestamp || n.createdAt || ''),
+            })
+          )
+        );
       }
     } catch (error) {
       console.error('Error fetching notifications:', error);
@@ -133,11 +209,9 @@ export default function NavBar() {
       await fetch(`/api/notifications/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ read: true })
+        body: JSON.stringify({ read: true }),
       });
-      setNotifications(notifications.map(n =>
-        n.id === id ? { ...n, read: true } : n
-      ));
+      setNotifications(notifications.map((n) => (n.id === id ? { ...n, read: true } : n)));
     } catch (error) {
       console.error('Error marking notification as read:', error);
     }
@@ -149,9 +223,9 @@ export default function NavBar() {
       await fetch('/api/notifications/mark-all-read', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid: user.uid })
+        body: JSON.stringify({ uid: user.uid }),
       });
-      setNotifications(notifications.map(n => ({ ...n, read: true })));
+      setNotifications(notifications.map((n) => ({ ...n, read: true })));
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
     }
@@ -183,15 +257,15 @@ export default function NavBar() {
   // Fetch notifications when user is available and poll every 30 seconds
   useEffect(() => {
     if (!user?.uid) return;
-    
+
     // Initial fetch
     fetchNotifications(user.uid);
-    
+
     // Poll every 30 seconds for real-time updates
     const interval = setInterval(() => {
       fetchNotifications(user.uid);
     }, 30000);
-    
+
     return () => clearInterval(interval);
   }, [user?.uid]);
 
@@ -210,13 +284,13 @@ export default function NavBar() {
 
   useEffect(() => {
     setMounted(true);
-    
+
     // Function to read and apply profile from localStorage
     const readProfileFromStorage = () => {
       if (typeof window !== 'undefined') {
         const authToken = localStorage.getItem('authToken');
         const userProfile = localStorage.getItem('userProfile');
-        
+
         if (authToken && userProfile) {
           try {
             const profile = JSON.parse(userProfile);
@@ -228,17 +302,7 @@ export default function NavBar() {
               uid: profile.firebaseUid || profile.uid,
             } as unknown as User);
             setUserRole(profile.role || 'resident');
-            
-            // Check building status - buildingId can be string or object
-            const extractedBuildingId = typeof profile.buildingId === 'object'
-              ? profile.buildingId?.buildingId || profile.buildingId
-              : profile.buildingId;
-            
-            if (profile.role !== 'admin' && !extractedBuildingId) {
-              setHasBuilding(false);
-            } else {
-              setHasBuilding(true);
-            }
+            setHasBuilding(hasAssignedBuilding(profile));
           } catch (error) {
             console.error('Error parsing stored user profile:', error);
           }
@@ -287,29 +351,18 @@ export default function NavBar() {
                 if (userProfile) {
                   const profile = JSON.parse(userProfile);
                   setUserRole(profile.role || 'resident');
-
-                  // Check if user has a building assigned (except for admins who might not need one initially)
-                  // Handle buildingId being either a string or object
-                  const extractedBuildingId = typeof profile.buildingId === 'object'
-                    ? profile.buildingId?.buildingId || profile.buildingId
-                    : profile.buildingId;
-                  
-                  if (profile.role !== 'admin' && !extractedBuildingId) {
-                    setHasBuilding(false);
-                  } else {
-                    setHasBuilding(true);
-                  }
+                  setHasBuilding(hasAssignedBuilding(profile));
 
                   // Check if user is super admin
                   if (profile.role === 'admin') {
                     fetch(`/api/admin/is-super?uid=${user.uid}`)
-                      .then(res => res.json())
-                      .then(data => {
+                      .then((res) => res.json())
+                      .then((data) => {
                         if (data.success && data.data.isSuperAdmin) {
                           setIsSuperAdmin(true);
                         }
                       })
-                      .catch(err => console.error('Error checking super admin:', err));
+                      .catch((err) => console.error('Error checking super admin:', err));
                   }
                 }
               } catch (error) {
@@ -344,27 +397,25 @@ export default function NavBar() {
   };
 
   // Filter nav links based on user role
-  const visibleLinks = NAV_LINKS.filter(link => link.roles.includes(userRole));
+  const visibleLinks = NAV_LINKS.filter((link) => link.roles.includes(userRole));
 
   return (
     <>
       {/* Join Building Banner */}
-      {mounted && user && !hasBuilding && (
-        <JoinBuildingBanner onJoinSuccess={handleJoinSuccess} />
-      )}
+      {mounted && user && !hasBuilding && <JoinBuildingBanner onJoinSuccess={handleJoinSuccess} />}
 
-      <nav className={`sticky top-0 z-50 transition-all duration-300 ${isScrolled
-        ? 'bg-white/95 dark:bg-gray-900/95 backdrop-blur-lg shadow-lg border-b border-gray-200 dark:border-gray-800'
-        : 'bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800'
-        }`}>
+      <nav
+        className={`sticky top-0 z-50 transition-all duration-300 ${
+          isScrolled
+            ? 'bg-white/95 dark:bg-gray-900/95 backdrop-blur-lg shadow-lg border-b border-gray-200 dark:border-gray-800'
+            : 'bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800'
+        }`}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             {/* Logo */}
             <div className="flex items-center gap-8">
-              <Link
-                href={user ? '/dashboard' : '/'}
-                className="flex items-center gap-2 group"
-              >
+              <Link href={user ? '/dashboard' : '/'} className="flex items-center gap-2 group">
                 <div className="relative w-9 h-9">
                   <Image
                     src="/fixitnow-icon.png"
@@ -391,12 +442,15 @@ export default function NavBar() {
                       <Link
                         key={link.href}
                         href={link.href}
-                        className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 group ${isActive
-                          ? 'bg-linear-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 text-blue-700 dark:text-blue-400'
-                          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
-                          }`}
+                        className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 group ${
+                          isActive
+                            ? 'bg-linear-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 text-blue-700 dark:text-blue-400'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
+                        }`}
                       >
-                        <span className={`transition-colors ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400'}`}>
+                        <span
+                          className={`transition-colors ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400'}`}
+                        >
                           {link.icon}
                         </span>
                         {link.name}
@@ -422,10 +476,15 @@ export default function NavBar() {
                       {user.displayName || user.email?.split('@')[0] || 'User'}
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 capitalize flex items-center gap-1">
-                      <span className={`inline-block w-2 h-2 rounded-full ${userRole === 'admin' ? 'bg-purple-500' :
-                        userRole === 'technician' ? 'bg-blue-500' :
-                          'bg-green-500'
-                        }`} />
+                      <span
+                        className={`inline-block w-2 h-2 rounded-full ${
+                          userRole === 'admin'
+                            ? 'bg-purple-500'
+                            : userRole === 'technician'
+                              ? 'bg-blue-500'
+                              : 'bg-green-500'
+                        }`}
+                      />
                       {userRole}
                     </p>
                   </div>
@@ -477,7 +536,9 @@ export default function NavBar() {
                         {/* Header */}
                         <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
                           <div>
-                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Notifications</h3>
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                              Notifications
+                            </h3>
                             {unreadCount > 0 && (
                               <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
                                 {unreadCount} unread
@@ -499,34 +560,55 @@ export default function NavBar() {
                           {notifications.length === 0 ? (
                             <div className="p-8 text-center">
                               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                                <svg className="w-8 h-8 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                                <svg
+                                  className="w-8 h-8 text-gray-400 dark:text-gray-500"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
+                                  />
                                 </svg>
                               </div>
-                              <p className="text-gray-500 dark:text-gray-400">No notifications yet</p>
-                              <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">You&apos;re all caught up!</p>
+                              <p className="text-gray-500 dark:text-gray-400">
+                                No notifications yet
+                              </p>
+                              <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
+                                You&apos;re all caught up!
+                              </p>
                             </div>
                           ) : (
                             notifications.map((notification) => (
                               <div
                                 key={notification.id}
                                 onClick={() => markAsRead(notification.id)}
-                                className={`p-4 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors ${!notification.read ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''
-                                  }`}
+                                className={`p-4 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors ${
+                                  !notification.read ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''
+                                }`}
                               >
                                 <div className="flex items-start gap-3">
                                   {/* Status indicator */}
-                                  <div className={`shrink-0 mt-1 w-2 h-2 rounded-full ${!notification.read
-                                    ? 'bg-blue-600'
-                                    : 'bg-gray-300 dark:bg-gray-700'
-                                    }`} />
+                                  <div
+                                    className={`shrink-0 mt-1 w-2 h-2 rounded-full ${
+                                      !notification.read
+                                        ? 'bg-blue-600'
+                                        : 'bg-gray-300 dark:bg-gray-700'
+                                    }`}
+                                  />
 
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-start justify-between gap-2">
-                                      <p className={`text-sm font-medium ${!notification.read
-                                        ? 'text-gray-900 dark:text-white'
-                                        : 'text-gray-700 dark:text-gray-300'
-                                        }`}>
+                                      <p
+                                        className={`text-sm font-medium ${
+                                          !notification.read
+                                            ? 'text-gray-900 dark:text-white'
+                                            : 'text-gray-700 dark:text-gray-300'
+                                        }`}
+                                      >
                                         {notification.title}
                                       </p>
                                       <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap shrink-0">
@@ -537,10 +619,13 @@ export default function NavBar() {
                                       {notification.message}
                                     </p>
                                     <div className="mt-2">
-                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${notification.type === 'success'
-                                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                                        : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
-                                        }`}>
+                                      <span
+                                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                          notification.type === 'success'
+                                            ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                                            : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                                        }`}
+                                      >
                                         {notification.type === 'success' ? 'Resolved' : 'Update'}
                                       </span>
                                     </div>
@@ -598,10 +683,22 @@ export default function NavBar() {
                   <Menu as="div" className="relative">
                     <Menu.Button className="flex items-center gap-2 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
                       <div className="flex items-center justify-center w-8 h-8 rounded-full bg-linear-to-br from-blue-600 to-indigo-600 text-white font-medium text-sm">
-                        {user.displayName?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase() || 'U'}
+                        {user.displayName?.charAt(0).toUpperCase() ||
+                          user.email?.charAt(0).toUpperCase() ||
+                          'U'}
                       </div>
-                      <svg className="w-4 h-4 text-gray-500 dark:text-gray-400 hidden md:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      <svg
+                        className="w-4 h-4 text-gray-500 dark:text-gray-400 hidden md:block"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 9l-7 7-7-7"
+                        />
                       </svg>
                     </Menu.Button>
 
@@ -621,10 +718,15 @@ export default function NavBar() {
                             {user.displayName || user.email}
                           </p>
                           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 capitalize flex items-center gap-1">
-                            <span className={`inline-block w-2 h-2 rounded-full ${userRole === 'admin' ? 'bg-purple-500' :
-                              userRole === 'technician' ? 'bg-blue-500' :
-                                'bg-green-500'
-                              }`} />
+                            <span
+                              className={`inline-block w-2 h-2 rounded-full ${
+                                userRole === 'admin'
+                                  ? 'bg-purple-500'
+                                  : userRole === 'technician'
+                                    ? 'bg-blue-500'
+                                    : 'bg-green-500'
+                              }`}
+                            />
                             {userRole}
                           </p>
                         </div>
@@ -637,8 +739,9 @@ export default function NavBar() {
                                 {({ active }) => (
                                   <Link
                                     href={link.href}
-                                    className={`${active ? 'bg-gray-100 dark:bg-gray-800' : ''
-                                      } flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300`}
+                                    className={`${
+                                      active ? 'bg-gray-100 dark:bg-gray-800' : ''
+                                    } flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300`}
                                   >
                                     <span className="text-gray-500 dark:text-gray-400">
                                       {link.icon}
@@ -655,11 +758,22 @@ export default function NavBar() {
                             {({ active }) => (
                               <Link
                                 href="/profile"
-                                className={`${active ? 'bg-gray-100 dark:bg-gray-800' : ''
-                                  } flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300`}
+                                className={`${
+                                  active ? 'bg-gray-100 dark:bg-gray-800' : ''
+                                } flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300`}
                               >
-                                <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                <svg
+                                  className="w-4 h-4 text-gray-500 dark:text-gray-400"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                                  />
                                 </svg>
                                 Profile
                               </Link>
@@ -670,28 +784,52 @@ export default function NavBar() {
                             {({ active }) => (
                               <Link
                                 href="/help"
-                                className={`${active ? 'bg-gray-100 dark:bg-gray-800' : ''
-                                  } flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300`}
+                                className={`${
+                                  active ? 'bg-gray-100 dark:bg-gray-800' : ''
+                                } flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300`}
                               >
-                                <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                <svg
+                                  className="w-4 h-4 text-gray-500 dark:text-gray-400"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                  />
                                 </svg>
                                 Help & Support
                               </Link>
                             )}
                           </Menu.Item>
 
-                          {/* Predictions - Admin Only (not in main nav to reduce crowding) */}
-                          {userRole === 'admin' && (
+                          {/* Predictions - Admin/Owner/Technician (not in main nav to reduce crowding) */}
+                          {(userRole === 'admin' ||
+                            userRole === 'owner' ||
+                            userRole === 'technician') && (
                             <Menu.Item>
                               {({ active }) => (
                                 <Link
                                   href="/predictions"
-                                  className={`${active ? 'bg-gray-100 dark:bg-gray-800' : ''
-                                    } flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300`}
+                                  className={`${
+                                    active ? 'bg-gray-100 dark:bg-gray-800' : ''
+                                  } flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300`}
                                 >
-                                  <svg className="w-4 h-4 text-blue-500 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                  <svg
+                                    className="w-4 h-4 text-blue-500 dark:text-blue-400"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                                    />
                                   </svg>
                                   Predictions
                                 </Link>
@@ -705,11 +843,22 @@ export default function NavBar() {
                               {({ active }) => (
                                 <Link
                                   href="/admin/manage"
-                                  className={`${active ? 'bg-gray-100 dark:bg-gray-800' : ''
-                                    } flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 border-t border-gray-200 dark:border-gray-800`}
+                                  className={`${
+                                    active ? 'bg-gray-100 dark:bg-gray-800' : ''
+                                  } flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 border-t border-gray-200 dark:border-gray-800`}
                                 >
-                                  <svg className="w-4 h-4 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                                  <svg
+                                    className="w-4 h-4 text-purple-600 dark:text-purple-400"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+                                    />
                                   </svg>
                                   <span className="font-medium">Manage Admins</span>
                                 </Link>
@@ -721,12 +870,23 @@ export default function NavBar() {
                           <Menu.Item>
                             {({ active }) => (
                               <button
-                                className={`${active ? 'bg-gray-100 dark:bg-gray-800' : ''
-                                  } flex items-center gap-2 w-full text-left px-4 py-2.5 text-sm text-red-600 dark:text-red-400 border-t border-gray-200 dark:border-gray-800`}
+                                className={`${
+                                  active ? 'bg-gray-100 dark:bg-gray-800' : ''
+                                } flex items-center gap-2 w-full text-left px-4 py-2.5 text-sm text-red-600 dark:text-red-400 border-t border-gray-200 dark:border-gray-800`}
                                 onClick={handleSignOut}
                               >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                                  />
                                 </svg>
                                 Sign out
                               </button>

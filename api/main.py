@@ -11,12 +11,21 @@ Run with: uvicorn main:app --reload --port 8000
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Any
 import json
 import os
-import pickle
-import math
 from pathlib import Path
+from datetime import datetime, timezone
+
+import numpy as np
+import pandas as pd
+
+from training_pipeline import train_from_mongodb, load_trained_bundle
+
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+except Exception:
+    BackgroundScheduler = None
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -84,6 +93,8 @@ class HealthResponse(BaseModel):
     status: str
     model_loaded: bool
     model_trees: int
+    trained_model_loaded: bool = False
+    trained_samples: int = 0
 
 
 # ============================================================
@@ -93,6 +104,9 @@ class HealthResponse(BaseModel):
 # Global model storage
 model_data = None
 model_loaded = False
+trained_bundle: Optional[dict[str, Any]] = None
+trained_model_loaded = False
+scheduler: Optional[Any] = None
 
 def load_model():
     """Load the trained model from JSON"""
@@ -116,10 +130,49 @@ def load_model():
         return False
 
 
+def load_trained_model_bundle() -> bool:
+    """Load persisted sklearn training bundle if available."""
+    global trained_bundle, trained_model_loaded
+    trained_bundle = load_trained_bundle()
+    trained_model_loaded = trained_bundle is not None
+    if trained_model_loaded:
+        print(f"[INFO] Trained pipeline loaded ({trained_bundle.get('sample_count', 0)} samples)")
+    else:
+        print("[INFO] No trained pipeline bundle found, using existing model/fallback")
+    return trained_model_loaded
+
+
+def run_retraining_job() -> None:
+    """Retrain model bundle from MongoDB data."""
+    mongo_uri = os.getenv("MONGODB_URI", "")
+    db_name = os.getenv("MONGODB_DB_NAME", "fixitnow")
+    result = train_from_mongodb(mongo_uri, db_name)
+    if result.success:
+        load_trained_model_bundle()
+        print(f"[INFO] Scheduled retraining completed: {result.samples} samples")
+    else:
+        print(f"[WARNING] Scheduled retraining skipped/failed: {result.message}")
+
+
 # Load model on startup
 @app.on_event("startup")
 async def startup_event():
     load_model()
+    load_trained_model_bundle()
+
+    auto_train_on_start = os.getenv("AUTO_TRAIN_ON_START", "false").lower() == "true"
+    if auto_train_on_start:
+        run_retraining_job()
+
+    global scheduler
+    if BackgroundScheduler is not None:
+        scheduler = BackgroundScheduler(timezone="UTC")
+        # Retrain every 6 hours by default.
+        scheduler.add_job(run_retraining_job, "interval", hours=6, id="model_retrain", replace_existing=True)
+        scheduler.start()
+        print("[INFO] Background retraining scheduler started (6h interval)")
+    else:
+        print("[WARNING] APScheduler not installed; scheduled retraining disabled")
 
 
 # ============================================================
@@ -155,7 +208,32 @@ def make_prediction(features: AssetFeatures) -> PredictionResult:
         'seasonal_load_factor': features.seasonal_load_factor,
     }
     
-    if model_loaded and model_data:
+    if trained_model_loaded and trained_bundle:
+        row = pd.DataFrame(
+            [
+                {
+                    "asset_type": features.asset_type,
+                    "asset_age_months": features.asset_age_months,
+                    "days_since_last_maintenance": features.days_since_last_maintenance,
+                    "total_maintenance_count": features.total_maintenance_count,
+                    "avg_monthly_usage_hours": features.avg_monthly_usage_hours,
+                    "last_repair_severity": features.last_repair_severity,
+                    "ambient_temperature_avg": features.ambient_temperature_avg,
+                    "humidity_level_avg": features.humidity_level_avg,
+                    "power_outage_events_last_year": features.power_outage_events_last_year,
+                    "manufacturer_rating": features.manufacturer_rating,
+                    "installation_quality": features.installation_quality,
+                    "building_age_years": features.building_age_years,
+                    "seasonal_load_factor": features.seasonal_load_factor,
+                }
+            ]
+        )
+
+        risk_level = str(trained_bundle["risk_model"].predict(row)[0])
+        failure_probability = float(np.clip(trained_bundle["prob_model"].predict(row)[0], 0.05, 0.95))
+        estimated_days = int(np.clip(trained_bundle["days_model"].predict(row)[0], 7, 730))
+
+    elif model_loaded and model_data:
         # Use trained model
         predictions = [predict_tree(tree, feature_dict) for tree in model_data['trees']]
         
@@ -335,7 +413,9 @@ async def health_check():
     return HealthResponse(
         status="healthy",
         model_loaded=model_loaded,
-        model_trees=model_data['n_trees'] if model_data else 0
+        model_trees=model_data['n_trees'] if model_data else 0,
+        trained_model_loaded=trained_model_loaded,
+        trained_samples=int((trained_bundle or {}).get("sample_count", 0)),
     )
 
 
@@ -391,10 +471,48 @@ async def model_info():
 async def reload_model():
     """Reload the model from disk"""
     success = load_model()
+    load_trained_model_bundle()
     if success:
         return {"status": "Model reloaded successfully", "trees": model_data['n_trees']}
     else:
         raise HTTPException(status_code=500, detail="Failed to reload model")
+
+
+class TrainRequest(BaseModel):
+    """Training trigger payload"""
+    event: Optional[str] = None
+    force: bool = False
+
+
+@app.post("/api/train")
+async def train_model_endpoint(request: TrainRequest):
+    """Trigger model training from Mongo maintenance/ticket data."""
+    mongo_uri = os.getenv("MONGODB_URI", "")
+    db_name = os.getenv("MONGODB_DB_NAME", "fixitnow")
+
+    if not mongo_uri:
+        raise HTTPException(status_code=500, detail="MONGODB_URI is not configured")
+
+    result = train_from_mongodb(mongo_uri, db_name)
+    if result.success:
+        load_trained_model_bundle()
+        return {
+            "success": True,
+            "message": result.message,
+            "event": request.event,
+            "samples": result.samples,
+            "metrics": result.metrics,
+            "modelPath": result.model_path,
+            "trainedAt": datetime.now(timezone.utc).isoformat(),
+        }
+
+    return {
+        "success": False,
+        "message": result.message,
+        "event": request.event,
+        "samples": result.samples,
+        "metrics": result.metrics,
+    }
 
 
 # ============================================================

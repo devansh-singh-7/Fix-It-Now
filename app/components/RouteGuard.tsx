@@ -25,6 +25,15 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { auth, type UserRole } from "@/app/lib/firebaseClient";
 
+function isUserRole(role: unknown): role is UserRole {
+  return (
+    role === "admin" ||
+    role === "owner" ||
+    role === "technician" ||
+    role === "resident"
+  );
+}
+
 interface RouteGuardProps {
   children: ReactNode;
   allowedRoles?: UserRole[];
@@ -76,34 +85,61 @@ export default function RouteGuard({
       // Check user role
       if (currentUser) {
         try {
-          // Fetch user role via API with timeout
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-          
-          const roleRes = await fetch(`/api/users/role?uid=${currentUser.uid}`, {
-            signal: controller.signal,
-          });
-          clearTimeout(timeoutId);
-          
-          if (!roleRes.ok) {
-            console.error("Failed to fetch user role, status:", roleRes.status);
-            // For server errors, still allow access if user is authenticated
-            // They may have limited functionality but won't be locked out
-            setIsAuthorized(true);
-            setIsLoading(false);
-            return;
-          }
-          
-          const roleData = await roleRes.json();
+          const fetchRole = async (): Promise<UserRole | null> => {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-          if (!roleData.success || !roleData.data?.role) {
-            console.error("User role not found in response");
+            try {
+              const roleRes = await fetch(`/api/users/role?uid=${currentUser.uid}`, {
+                signal: controller.signal,
+              });
+
+              if (!roleRes.ok) {
+                console.error('Failed to fetch user role, status:', roleRes.status);
+                return null;
+              }
+
+              const roleData = await roleRes.json();
+              const roleFromApi = roleData?.success ? roleData.data?.role : null;
+              return isUserRole(roleFromApi) ? roleFromApi : null;
+            } finally {
+              clearTimeout(timeoutId);
+            }
+          };
+
+          let userRole = await fetchRole();
+
+          if (!userRole) {
+            // Recovery path for wiped DB: recreate profile from authenticated Firebase user.
+            const fallbackName =
+              currentUser.displayName ||
+              currentUser.email?.split('@')[0] ||
+              'User';
+
+            const createRes = await fetch('/api/users/create', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                uid: currentUser.uid,
+                email: currentUser.email,
+                name: fallbackName,
+                role: 'resident',
+              }),
+            });
+
+            if (!createRes.ok) {
+              console.error('Failed to auto-provision missing user profile');
+            }
+
+            userRole = await fetchRole();
+          }
+
+          if (!userRole) {
+            console.error('User role not found in response');
             setIsAuthorized(false);
             setIsLoading(false);
             return;
           }
-
-          const userRole = roleData.data.role;
 
           // Check if user role is in allowed roles
           if (allowedRoles.includes(userRole)) {

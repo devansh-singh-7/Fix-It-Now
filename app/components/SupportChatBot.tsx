@@ -24,15 +24,59 @@ interface Message {
     sender: "ai" | "user"
 }
 
+function renderMessageWithLinks(message: string) {
+    const markdownLinkRegex = /\[([^\]]+)\]\((\/[^)\s]+)\)/g
+    const lines = message.split("\n")
+
+    return lines.map((line, lineIndex) => {
+        const parts: Array<string | JSX.Element> = []
+        let lastIndex = 0
+        let match: RegExpExecArray | null
+
+        markdownLinkRegex.lastIndex = 0
+        while ((match = markdownLinkRegex.exec(line)) !== null) {
+            const [fullMatch, label, href] = match
+            const start = match.index
+
+            if (start > lastIndex) {
+                parts.push(line.slice(lastIndex, start))
+            }
+
+            parts.push(
+                <a
+                    key={`chat-link-${lineIndex}-${start}`}
+                    href={href}
+                    className="underline decoration-blue-400 underline-offset-2 hover:text-blue-600 dark:hover:text-blue-300 font-medium"
+                >
+                    {label}
+                </a>
+            )
+
+            lastIndex = start + fullMatch.length
+        }
+
+        if (lastIndex < line.length) {
+            parts.push(line.slice(lastIndex))
+        }
+
+        return (
+            <span key={`chat-line-${lineIndex}`}>
+                {parts}
+                {lineIndex < lines.length - 1 && <br />}
+            </span>
+        )
+    })
+}
+
 // Comprehensive knowledge base for FixItNow
 const knowledgeBase = {
     // Ticket Management
     tickets: {
-        create: "To create a new ticket:\n1. Go to your Dashboard\n2. Click 'New Ticket' button\n3. Fill in the title and description\n4. Select category (Plumbing, Electrical, HVAC, Cleaning, Other)\n5. Set priority (Low, Medium, High, Urgent)\n6. Add your location/unit number\n7. Optionally add photos\n8. Submit!\n\nYour building admin will be notified automatically.",
-        categories: "FixItNow supports these ticket categories:\n• 🔧 Plumbing - Leaks, clogs, water issues\n• ⚡ Electrical - Power, lighting, outlets\n• ❄️ HVAC - Heating, cooling, ventilation\n• 🧹 Cleaning - General cleaning requests\n• 📦 Other - Everything else",
-        priority: "Ticket priority levels:\n• 🟢 Low - Non-urgent, can wait a few days\n• 🟡 Medium - Should be addressed within 24-48 hours\n• 🟠 High - Needs attention today\n• 🔴 Urgent - Emergency, needs immediate action\n\nTechnicians see urgent tickets first!",
+        create: "To create a new ticket:\n1. Open [Dashboard](/dashboard)\n2. Click 'Create Ticket'\n3. Fill title, description, category, and priority\n4. Add location/unit details\n5. Submit\n\nUseful links:\n• [Go to Dashboard](/dashboard)\n• [View Tickets](/tickets)",
+        categories: "FixItNow supports these ticket categories:\n• Plumbing - Leaks, clogs, water issues\n• Electrical - Power, lighting, outlets\n• HVAC - Heating, cooling, ventilation\n• Cleaning - General cleaning requests\n• Other - Everything else",
+        priority: "Ticket priority levels:\n• Low - Non-urgent, can wait a few days\n• Medium - Should be addressed within 24-48 hours\n• High - Needs attention today\n• Urgent - Emergency, needs immediate action\n\nTechnicians see urgent tickets first!",
         status: "Ticket status flow:\n1. Open - Just created\n2. Assigned - Admin assigned to technician\n3. Accepted - Technician accepted the job\n4. In Progress - Work is being done\n5. Completed - Issue resolved\n\nYou'll get notified at each status change!",
-        view: "To view your tickets:\n1. Go to Dashboard\n2. See all your tickets in the list\n3. Use filters to show Open, In Progress, or Resolved\n4. Click any ticket to see details and timeline\n\nAdmins can see all building tickets, residents see only their own.",
+        view: "To view your tickets:\n1. Open [Tickets](/tickets)\n2. Filter by Open/In Progress/Resolved\n3. Click a ticket for timeline and details\n\nAdmins can see all building tickets, residents see only their own.",
         images: "You can attach up to 5 images per ticket! This helps technicians understand the issue before arriving. Just click the camera icon when creating a ticket.",
         comments: "You can add comments to any ticket! Use the comment section to:\n• Ask questions\n• Provide updates\n• Share additional info\n• Communicate with technicians",
     },
@@ -47,23 +91,17 @@ const knowledgeBase = {
 
     // Buildings
     buildings: {
-        join: "To join a building:\n1. Get the join code from your building admin\n2. Code format: ABC-123-XYZ\n3. Go to Profile > Settings\n4. Enter the join code\n5. You're in!\n\nOr enter the code during signup.",
+        join: "To join a building:\n1. Get the join code from your building admin\n2. Open [Dashboard](/dashboard)\n3. Use 'Join Your Building' and enter the code\n4. Confirm\n\nYou can also manage account details in [Settings](/settings).",
         create: "Admins can create a building:\n1. Go to Buildings section\n2. Click 'Create New Building'\n3. Enter building name and address\n4. A unique join code is auto-generated\n5. Share the code with residents!",
         code: "The building join code is in format ABC-123-XYZ. Find it in:\n• Buildings page (if you're admin)\n• Ask your building administrator\n\nEach building has a unique code!",
         manage: "Building management (Admin only):\n• Edit building name/address\n• View all residents\n• Manage technicians\n• Create announcements\n• View building statistics",
     },
 
-    // Subscription & Pricing
-    subscription: {
-        plans: "FixItNow Subscription Plans:\n\n🥉 Basic (Tier 3) - $29/month\n• 1 building\n• Up to 50 tickets/month\n• Email support\n\n🥈 Pro (Tier 2) - $79/month\n• Up to 5 buildings\n• Unlimited tickets\n• AI Chatbot support\n• Analytics dashboard\n• Priority support\n\n🥇 Enterprise (Tier 1) - $199/month\n• Unlimited buildings\n• All Pro features\n• Dedicated account manager\n• Custom integrations\n• SLA guarantee",
-        upgrade: "To upgrade your plan:\n1. Go to the Pricing page\n2. Select your desired plan\n3. Choose monthly or yearly billing\n4. Complete the payment\n\nYearly plans save up to 17%!",
-        chatbot: "The AI Chatbot is available for Pro and Enterprise subscribers!\n\nIf you're on Basic plan, upgrade to Pro to get 24/7 AI support.",
-        billing: "Billing options:\n• Monthly: Pay each month\n• Yearly: Save ~17% with annual billing\n\nView your subscription in Profile page.",
-    },
+
 
     // Announcements
     announcements: {
-        view: "Announcements appear on your dashboard:\n• 🔔 System announcements - From FixItNow team\n• 🏢 Building announcements - From your building admin\n\nDifferent colors indicate priority:\n• Blue = Info\n• Yellow = Warning\n• Red = Urgent",
+        view: "Announcements appear on your dashboard:\n• System announcements - From FixItNow team\n• Building announcements - From your building admin\n\nDifferent colors indicate priority:\n• Blue = Info\n• Yellow = Warning\n• Red = Urgent",
         create: "Admins can create announcements:\n1. Go to Dashboard\n2. Click 'Create Announcement'\n3. Select type (System/Building)\n4. Set priority level\n5. Add title and message\n6. Set expiration date (optional)\n7. Publish!",
         types: "Announcement types:\n• System - Visible to all users (Platform-wide)\n• Building - Only visible to your building members",
     },
@@ -77,7 +115,7 @@ const knowledgeBase = {
 
     // Account & Profile
     account: {
-        profile: "Your profile shows:\n• Name and email\n• Role (Admin/Technician/Resident)\n• Building affiliation\n• Subscription plan & tier\n• AI support access status",
+        profile: "Your profile shows:\n• Name and email\n• Role (Admin/Technician/Resident)\n• Building affiliation\n• AI support access status",
         settings: "In Settings you can:\n• Update display name\n• Change password\n• Join a new building\n• View notification preferences",
         password: "To change your password:\n1. Go to Settings\n2. Click 'Change Password'\n3. Enter current password\n4. Enter new password twice\n5. Save changes",
         logout: "To log out:\n1. Click your profile icon in the navbar\n2. Select 'Sign Out'\n\nYou'll be redirected to the login page.",
@@ -85,13 +123,13 @@ const knowledgeBase = {
 
     // Analytics & Reports
     analytics: {
-        view: "Analytics Dashboard (Pro/Enterprise):\n• Ticket resolution times\n• Tickets by category\n• Monthly trends\n• Technician performance\n• Building statistics",
-        reports: "Available reports:\n• Open vs Resolved tickets\n• Average response time\n• Tickets by priority\n• Technician workload\n• Monthly/Weekly summaries",
+        view: "Analytics Dashboard:\n• Ticket resolution times\n• Tickets by category\n• Monthly trends\n• Technician performance\n• Building statistics\n\nOpen: [Analytics](/analytics)",
+        reports: "Available reports:\n• Open vs Resolved tickets\n• Average response time\n• Tickets by priority\n• Technician workload\n• Monthly/Weekly summaries\n\nOpen: [Reports](/reports)",
     },
 
     // General Help
     general: {
-        contact: "Need more help?\n• Email: support@fixitnow.com\n• Pro/Enterprise: Use this AI chatbot!\n• Check our Help page for FAQs\n• Building issues? Contact your admin",
+        contact: "Need more help?\n• Email: support@fixitnow.com\n• Check [Help Center](/help)\n• Building issues? Contact your admin",
         about: "FixItNow is a Smart Maintenance Request System that connects residents with building management and technicians. Features include:\n• Easy ticket creation\n• Real-time status tracking\n• AI-powered categorization\n• Mobile-friendly design\n• Analytics & insights",
         mobile: "FixItNow works great on mobile!\n• Responsive design\n• Take photos directly\n• Get notifications\n• Manage tickets on-the-go",
     },
@@ -103,22 +141,25 @@ function getAIResponse(userMessage: string): string {
 
     // Greetings
     if (/^(hi|hello|hey|howdy|hola|greetings)/i.test(msg)) {
-        return "Hello! 👋 I'm your FixItNow AI assistant. How can I help you today?\n\nI can help with:\n• Creating & managing tickets\n• Building management\n• Subscription questions\n• Technician info\n• And much more!\n\nJust ask away!"
+        return "Hello! I'm your FixItNow AI assistant. How can I help you today?\n\nI can help with:\n• Creating & managing tickets\n• Building management\n• Technician info\n• And much more!\n\nJust ask away!"
     }
 
     // Thanks
     if (/^(thanks|thank you|thx|ty|appreciated)/i.test(msg)) {
-        return "You're welcome! 😊 Is there anything else I can help you with?"
+        return "You're welcome! Is there anything else I can help you with?"
     }
 
     // Goodbye
     if (/^(bye|goodbye|see you|cya|later)/i.test(msg)) {
-        return "Goodbye! 👋 Have a great day! If you need help later, I'll be right here."
+        return "Goodbye! Have a great day! If you need help later, I'll be right here."
     }
 
     // TICKETS
     if (/(create|new|submit|make|file|report).*(ticket|issue|request|problem|complaint)/i.test(msg)) {
         return knowledgeBase.tickets.create
+    }
+    if (/(open|go to|where).*(dashboard)/i.test(msg)) {
+        return "Open your dashboard here: [Dashboard](/dashboard)"
     }
     if (/(ticket|issue).*(category|categories|type|types)/i.test(msg) || /what.*(category|categories)/i.test(msg)) {
         return knowledgeBase.tickets.categories
@@ -156,7 +197,7 @@ function getAIResponse(userMessage: string): string {
         return knowledgeBase.roles.change
     }
     if (/role|permission/i.test(msg)) {
-        return "There are 3 roles in FixItNow:\n• 👑 Admin - Building managers\n• 🔧 Technician - Maintenance workers\n• 🏠 Resident - Building occupants\n\nAsk me about any specific role for details!"
+        return "There are 3 roles in FixItNow:\n• Admin - Building managers\n• Technician - Maintenance workers\n• Resident - Building occupants\n\nAsk me about any specific role for details!"
     }
 
     // BUILDINGS
@@ -176,22 +217,12 @@ function getAIResponse(userMessage: string): string {
         return "I can help with buildings! Ask about:\n• Joining a building\n• Creating a building (Admin)\n• Building join codes\n• Managing building settings"
     }
 
-    // SUBSCRIPTION & PRICING
-    if (/(plan|pricing|price|cost|subscription).*(what|which|show|list)/i.test(msg) || /plans/i.test(msg) || /pricing/i.test(msg)) {
-        return knowledgeBase.subscription.plans
+    // PREDICTIONS
+    if (/(prediction|predict|ai risk|failure|forecast)/i.test(msg)) {
+        return "You can view prediction insights here:\n• [Open Predictions](/predictions)\n\nUse filters to review risk levels and recommended actions."
     }
-    if (/(upgrade|change).*(plan|subscription)/i.test(msg)) {
-        return knowledgeBase.subscription.upgrade
-    }
-    if (/(chatbot|ai|assistant).*(access|available|get)/i.test(msg)) {
-        return knowledgeBase.subscription.chatbot
-    }
-    if (/(billing|payment|pay)/i.test(msg)) {
-        return knowledgeBase.subscription.billing
-    }
-    if (/subscription|tier/i.test(msg)) {
-        return knowledgeBase.subscription.plans
-    }
+
+
 
     // ANNOUNCEMENTS
     if (/(view|see|find|where).*(announcement)/i.test(msg) || /announcement/i.test(msg)) {
@@ -237,6 +268,23 @@ function getAIResponse(userMessage: string): string {
         return knowledgeBase.analytics.reports
     }
 
+    // NAVIGATION LINKS
+    if (/(where|link|open page|go to).*(ticket|tickets)/i.test(msg)) {
+        return "Open tickets here: [Tickets](/tickets)"
+    }
+    if (/(where|link|open page|go to).*(prediction|predictions)/i.test(msg)) {
+        return "Open predictions here: [Predictions](/predictions)"
+    }
+    if (/(where|link|open page|go to).*(analytics)/i.test(msg)) {
+        return "Open analytics here: [Analytics](/analytics)"
+    }
+    if (/(where|link|open page|go to).*(profile)/i.test(msg)) {
+        return "Open profile here: [Profile](/profile)"
+    }
+    if (/(where|link|open page|go to).*(settings)/i.test(msg)) {
+        return "Open settings here: [Settings](/settings)"
+    }
+
     // GENERAL
     if (/(contact|email|phone|support|help me)/i.test(msg)) {
         return knowledgeBase.general.contact
@@ -250,18 +298,18 @@ function getAIResponse(userMessage: string): string {
 
     // HELP
     if (/^help$|^help me$|what can you do|how can you help/i.test(msg)) {
-        return "I'm your FixItNow AI assistant! I can help with:\n\n🎫 **Tickets**\n• Creating tickets\n• Categories & priorities\n• Status tracking\n\n🏢 **Buildings**\n• Joining buildings\n• Building codes\n\n👤 **Accounts**\n• Roles & permissions\n• Profile settings\n\n💳 **Subscriptions**\n• Plans & pricing\n• Upgrades\n\n📊 **Analytics** (Pro/Enterprise)\n• Reports & stats\n\nJust ask me anything!"
+        return "I'm your FixItNow AI assistant! I can help with:\n\n**Tickets**\n• Creating tickets\n• Categories & priorities\n• Status tracking\n\n**Buildings**\n• Joining buildings\n• Building codes\n\n**Accounts**\n• Roles & permissions\n• Profile settings\n\n**Analytics**\n• Reports & stats\n\nJust ask me anything!"
     }
 
     // Default fallback
-    return "I'm not sure about that specific question, but I'm here to help! Try asking about:\n\n• Creating or managing tickets\n• Building management & join codes\n• User roles (Admin, Technician, Resident)\n• Subscription plans & pricing\n• Profile & settings\n\nOr type 'help' for a full list of topics!"
+    return "I can help with tickets, buildings, predictions, analytics, and account settings.\n\nTry:\n• 'How do I create a ticket?'\n• 'Open predictions page'\n• 'Where is analytics?'\n\nQuick links:\n• [Dashboard](/dashboard)\n• [Tickets](/tickets)\n• [Predictions](/predictions)"
 }
 
 export function SupportChatBot() {
     const [messages, setMessages] = useState<Message[]>([
         {
             id: 1,
-            content: "Hello! 👋 I'm your FixItNow AI assistant. How can I help you today?\n\nTip: Ask me about tickets, buildings, roles, or subscriptions!",
+            content: "Hello! I'm your FixItNow AI assistant. How can I help you today?\n\nTip: Ask me about tickets, buildings, roles, or analytics!",
             sender: "ai",
         },
     ])
@@ -459,7 +507,7 @@ export function SupportChatBot() {
             icon={<Bot className="h-6 w-6" />}
         >
             {/* Header */}
-            <ExpandableChatHeader className="flex-col text-center justify-center bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700 text-white">
+            <ExpandableChatHeader className="flex-col text-center justify-center bg-linear-to-br from-blue-500 via-blue-600 to-indigo-700 text-white">
                 <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -508,7 +556,7 @@ export function SupportChatBot() {
                                     <ChatBubbleMessage
                                         variant={message.sender === "user" ? "sent" : "received"}
                                     >
-                                        <div className="whitespace-pre-line">{message.content}</div>
+                                        <div className="whitespace-pre-line">{renderMessageWithLinks(message.content)}</div>
                                     </ChatBubbleMessage>
                                 </ChatBubble>
                             </motion.div>
@@ -578,7 +626,7 @@ export function SupportChatBot() {
                             <Button
                                 type="submit"
                                 size="sm"
-                                className="h-7 px-3 gap-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 rounded-lg text-xs"
+                                className="h-7 px-3 gap-1 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 rounded-lg text-xs"
                                 disabled={isLoading || !input.trim()}
                             >
                                 Send

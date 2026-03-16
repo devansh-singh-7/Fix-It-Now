@@ -100,6 +100,13 @@ export async function getTicketStatistics(buildingId: string | null): Promise<Ti
 
     // Build match query - if buildingId is null, match all tickets
     const matchQuery = buildingId ? { buildingId } : {};
+    
+    console.log('[Analytics] Fetching ticket statistics for:', buildingId || 'all buildings');
+    console.log('[Analytics] Match query:', JSON.stringify(matchQuery));
+    
+    // First, get total count to verify tickets exist
+    const totalCount = await ticketsCollection.countDocuments(matchQuery);
+    console.log('[Analytics] Total tickets found:', totalCount);
 
     // Get status counts
     const statusCounts = await ticketsCollection.aggregate([
@@ -111,6 +118,8 @@ export async function getTicketStatistics(buildingId: string | null): Promise<Ti
         } 
       }
     ]).toArray();
+    
+    console.log('[Analytics] Status counts:', statusCounts);
 
     // Get category distribution
     const categoryDistribution = await ticketsCollection.aggregate([
@@ -192,7 +201,7 @@ export async function getTicketStatistics(buildingId: string | null): Promise<Ti
     const statusMap = new Map(statusCounts.map(s => [s._id, s.count]));
     const total = statusCounts.reduce((sum, s) => sum + s.count, 0);
 
-    return {
+    const result = {
       total,
       open: statusMap.get('open') || 0,
       assigned: statusMap.get('assigned') || 0,
@@ -213,8 +222,18 @@ export async function getTicketStatistics(buildingId: string | null): Promise<Ti
         count: t.count
       }))
     };
+    
+    console.log('[Analytics] Ticket statistics result:', {
+      total: result.total,
+      open: result.open,
+      completed: result.completed,
+      categories: result.byCategory.length,
+      priorities: result.byPriority.length
+    });
+    
+    return result;
   } catch (error) {
-    console.error('Error getting ticket statistics:', error);
+    console.error('[Analytics] Error getting ticket statistics:', error);
     throw error;
   }
 }
@@ -226,6 +245,8 @@ export async function getTicketStatistics(buildingId: string | null): Promise<Ti
 export async function getTechnicianPerformance(buildingId: string | null): Promise<TechnicianPerformance[]> {
   try {
     const db = await getDatabase();
+    
+    console.log('[Analytics] Fetching technician performance for:', buildingId || 'all buildings');
     
     // Build match query
     const matchQuery = buildingId 
@@ -274,6 +295,8 @@ export async function getTechnicianPerformance(buildingId: string | null): Promi
       { $sort: { completed: -1 } }
     ]).toArray();
 
+    console.log('[Analytics] Technician performance records:', performance.length);
+
     // Calculate completion times and category distribution
     const result: TechnicianPerformance[] = [];
 
@@ -315,8 +338,9 @@ export async function getTechnicianPerformance(buildingId: string | null): Promi
 
     return result;
   } catch (error) {
-    console.error('Error getting technician performance:', error);
-    throw error;
+    console.error('[Analytics] Error getting technician performance:', error);
+    // Return empty array instead of throwing to prevent page crash
+    return [];
   }
 }
 
@@ -331,45 +355,106 @@ export async function getPredictionSummary(buildingId: string | null): Promise<P
 
     const matchQuery = buildingId ? { buildingId } : {};
 
-    // Get risk distribution
+    console.log('[Analytics] Fetching prediction summary for:', buildingId || 'all buildings');
+
+    // Get total count first
+    const totalCount = await predictionsCollection.countDocuments(matchQuery);
+    console.log('[Analytics] Total predictions found:', totalCount);
+
+    // If no predictions, return empty data
+    if (totalCount === 0) {
+      console.log('[Analytics] No predictions found, returning empty summary');
+      return {
+        total: 0,
+        highRisk: 0,
+        mediumRisk: 0,
+        lowRisk: 0,
+        byModel: [],
+        recentPredictions: []
+      };
+    }
+
+    // Get risk distribution - support both nested and flat structures
     const riskDistribution = await predictionsCollection.aggregate([
       { $match: matchQuery },
       {
+        $project: {
+          riskBucket: {
+            $ifNull: [
+              '$prediction.riskBucket',
+              { $ifNull: ['$riskBucket', 'unknown'] }
+            ]
+          }
+        }
+      },
+      {
         $group: {
-          _id: '$prediction.riskBucket',
+          _id: '$riskBucket',
           count: { $sum: 1 }
         }
       }
     ]).toArray();
 
-    // Get model statistics
+    console.log('[Analytics] Risk distribution:', riskDistribution);
+
+    // Get model statistics - support both nested and flat structures
     const modelStats = await predictionsCollection.aggregate([
       { $match: matchQuery },
+      {
+        $project: {
+          model: { $ifNull: ['$model', 'unknown'] },
+          failureProbability: {
+            $ifNull: [
+              '$prediction.failureProbability',
+              { $ifNull: ['$failureProbability', 0] }
+            ]
+          }
+        }
+      },
       {
         $group: {
           _id: '$model',
           count: { $sum: 1 },
-          avgProbability: { $avg: '$prediction.failureProbability' }
+          avgProbability: { $avg: '$failureProbability' }
         }
       }
     ]).toArray();
 
-    // Get recent high-risk predictions
+    console.log('[Analytics] Model statistics:', modelStats);
+
+    // Get recent high-risk predictions - support both nested and flat structures
     const recentPredictions = await predictionsCollection.aggregate([
       { $match: matchQuery },
       { $sort: { createdAt: -1 } },
       { $limit: 10 },
       {
         $project: {
-          id: 1,
+          id: { $ifNull: ['$_id', '$id'] },
           ticketId: 1,
-          riskBucket: '$prediction.riskBucket',
-          failureProbability: '$prediction.failureProbability',
-          recommendedAction: '$prediction.recommendedAction',
+          riskBucket: {
+            $ifNull: [
+              '$prediction.riskBucket',
+              { $ifNull: ['$riskBucket', 'unknown'] }
+            ]
+          },
+          failureProbability: {
+            $ifNull: [
+              '$prediction.failureProbability',
+              { $ifNull: ['$failureProbability', 0] }
+            ]
+          },
+          recommendedAction: {
+            $ifNull: [
+              '$prediction.recommendedAction',
+              { $ifNull: ['$recommendedAction', 'Review and assess'] }
+            ]
+          },
           createdAt: 1
         }
       }
     ]).toArray();
+
+    console.log('[Analytics] Recent predictions count:', recentPredictions.length);
 
     const riskMap = new Map(riskDistribution.map(r => [r._id, r.count]));
     const total = riskDistribution.reduce((sum, r) => sum + r.count, 0);
@@ -380,22 +465,30 @@ export async function getPredictionSummary(buildingId: string | null): Promise<P
       mediumRisk: riskMap.get('medium') || 0,
       lowRisk: riskMap.get('low') || 0,
       byModel: modelStats.map(m => ({
-        model: m._id,
+        model: m._id || 'unknown',
         count: m.count,
-        avgProbability: m.avgProbability
+        avgProbability: m.avgProbability || 0
       })),
       recentPredictions: recentPredictions.map(p => ({
-        id: p.id,
+        id: String(p.id || p._id),
         ticketId: p.ticketId,
-        riskBucket: p.riskBucket,
-        failureProbability: p.failureProbability,
-        recommendedAction: p.recommendedAction,
+        riskBucket: p.riskBucket || 'unknown',
+        failureProbability: p.failureProbability || 0,
+        recommendedAction: p.recommendedAction || 'Review and assess',
         createdAt: p.createdAt
       }))
     };
   } catch (error) {
-    console.error('Error getting prediction summary:', error);
-    throw error;
+    console.error('[Analytics] Error getting prediction summary:', error);
+    // Return empty data instead of throwing to prevent entire analytics page from breaking
+    return {
+      total: 0,
+      highRisk: 0,
+      mediumRisk: 0,
+      lowRisk: 0,
+      byModel: [],
+      recentPredictions: []
+    };
   }
 }
 
@@ -409,6 +502,8 @@ export async function getInvoiceAnalytics(buildingId: string | null): Promise<In
     const invoicesCollection = db.collection('invoices');
 
     const matchQuery = buildingId ? { buildingId } : {};
+    
+    console.log('[Analytics] Fetching invoice analytics for:', buildingId || 'all buildings');
 
     // Get revenue by status
     const revenueByStatus = await invoicesCollection.aggregate([

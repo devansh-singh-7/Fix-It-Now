@@ -1,0 +1,760 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Function Point Calculator</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: #f5f5f5;
+        padding: 20px;
+        min-height: 100vh;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+
+      .header {
+        background: #333;
+        color: white;
+        padding: 30px;
+        text-align: center;
+        border-bottom: 2px solid #555;
+      }
+
+      .header h1 {
+        font-size: 2.5em;
+        margin-bottom: 10px;
+      }
+
+      .header p {
+        font-size: 1.1em;
+        color: #ddd;
+      }
+
+      .content {
+        padding: 40px;
+      }
+
+      .section {
+        margin-bottom: 40px;
+      }
+
+      .section-title {
+        font-size: 1.8em;
+        color: #333;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #666;
+      }
+
+      .complexity-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+        border: 1px solid #ddd;
+      }
+
+      .complexity-table th {
+        background: #555;
+        color: white;
+        padding: 15px;
+        text-align: left;
+        font-weight: 600;
+        border: 1px solid #666;
+      }
+
+      .complexity-table td {
+        padding: 12px 15px;
+        border: 1px solid #ddd;
+      }
+
+      .complexity-table tr:hover {
+        background-color: #f9f9f9;
+      }
+
+      .complexity-table input[type='number'] {
+        width: 80px;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        text-align: center;
+        font-size: 14px;
+      }
+
+      .complexity-table input[type='number']:focus {
+        outline: none;
+        border-color: #666;
+      }
+
+      .weight-info {
+        font-size: 0.9em;
+        color: #666;
+        font-style: italic;
+      }
+
+      .domain-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+        border: 1px solid #ddd;
+      }
+
+      .domain-table th {
+        background: #555;
+        color: white;
+        padding: 15px;
+        text-align: left;
+        font-weight: 600;
+        border: 1px solid #666;
+      }
+
+      .domain-table td {
+        padding: 12px 15px;
+        border: 1px solid #ddd;
+      }
+
+      .domain-table tr:hover {
+        background-color: #f9f9f9;
+      }
+
+      .domain-table select {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 14px;
+        cursor: pointer;
+      }
+
+      .domain-table select:focus {
+        outline: none;
+        border-color: #666;
+      }
+
+      .calculate-btn {
+        background: #555;
+        color: white;
+        border: none;
+        padding: 15px 40px;
+        font-size: 1.2em;
+        border-radius: 4px;
+        cursor: pointer;
+        display: block;
+        margin: 30px auto;
+        font-weight: 600;
+      }
+
+      .calculate-btn:hover {
+        background: #666;
+      }
+
+      .calculate-btn:active {
+        background: #444;
+      }
+
+      .results {
+        background: #f9f9f9;
+        padding: 30px;
+        border-radius: 4px;
+        margin-top: 30px;
+        display: none;
+        border: 1px solid #ddd;
+      }
+
+      .results.show {
+        display: block;
+      }
+
+      .result-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 15px;
+        margin-bottom: 10px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      }
+
+      .result-label {
+        font-weight: 600;
+        color: #333;
+        font-size: 1.1em;
+      }
+
+      .result-value {
+        font-size: 1.2em;
+        color: #333;
+        font-weight: bold;
+      }
+
+      .final-result {
+        background: #555;
+        color: white;
+        font-size: 1.5em;
+        padding: 20px;
+        text-align: center;
+        border-radius: 4px;
+        margin-top: 20px;
+      }
+
+      .calculation-steps {
+        margin-top: 20px;
+        padding: 20px;
+        background: white;
+        border-radius: 4px;
+        border-left: 3px solid #666;
+      }
+
+      .calculation-steps h3 {
+        color: #333;
+        margin-bottom: 15px;
+      }
+
+      .calculation-steps p {
+        margin-bottom: 10px;
+        line-height: 1.6;
+        color: #555;
+      }
+
+      .formula {
+        background: #f5f5f5;
+        padding: 10px;
+        border-radius: 4px;
+        margin: 10px 0;
+        font-family: 'Courier New', monospace;
+        color: #333;
+        border: 1px solid #ddd;
+      }
+
+      @media (max-width: 768px) {
+        .content {
+          padding: 20px;
+        }
+
+        .header h1 {
+          font-size: 1.8em;
+        }
+
+        .complexity-table,
+        .domain-table {
+          font-size: 0.9em;
+        }
+
+        .complexity-table input[type='number'] {
+          width: 60px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Function Point Calculator</h1>
+        <p>Calculate software size using Function Point Analysis methodology</p>
+      </div>
+
+      <div class="content">
+        <!-- Complexity Adjustment Table -->
+        <div class="section">
+          <h2 class="section-title">Step 1: Unadjusted Function Points (UFP)</h2>
+          <p style="margin-bottom: 20px; color: #666">
+            Enter the count for each complexity level of function types:
+          </p>
+
+          <table class="complexity-table">
+            <thead>
+              <tr>
+                <th>Function Type</th>
+                <th>Simple<br /><span class="weight-info">(Weight)</span></th>
+                <th>Average<br /><span class="weight-info">(Weight)</span></th>
+                <th>Complex<br /><span class="weight-info">(Weight)</span></th>
+                <th>Count</th>
+                <th>Points</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <strong>External Inputs (EI)</strong>
+                </td>
+                <td>
+                  <input type="number" id="ei-simple" min="0" value="6" onchange="calculate()" />
+                  <div class="weight-info">× 3</div>
+                </td>
+                <td>
+                  <input type="number" id="ei-average" min="0" value="10" onchange="calculate()" />
+                  <div class="weight-info">× 4</div>
+                </td>
+                <td>
+                  <input type="number" id="ei-complex" min="0" value="4" onchange="calculate()" />
+                  <div class="weight-info">× 6</div>
+                </td>
+                <td><span id="ei-count">0</span></td>
+                <td><span id="ei-subtotal">0</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <strong>External Outputs (EO)</strong>
+                </td>
+                <td>
+                  <input type="number" id="eo-simple" min="0" value="5" onchange="calculate()" />
+                  <div class="weight-info">× 4</div>
+                </td>
+                <td>
+                  <input type="number" id="eo-average" min="0" value="8" onchange="calculate()" />
+                  <div class="weight-info">× 5</div>
+                </td>
+                <td>
+                  <input type="number" id="eo-complex" min="0" value="3" onchange="calculate()" />
+                  <div class="weight-info">× 7</div>
+                </td>
+                <td><span id="eo-count">0</span></td>
+                <td><span id="eo-subtotal">0</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <strong>External Inquiries (EQ)</strong>
+                </td>
+                <td>
+                  <input type="number" id="eq-simple" min="0" value="7" onchange="calculate()" />
+                  <div class="weight-info">× 3</div>
+                </td>
+                <td>
+                  <input type="number" id="eq-average" min="0" value="5" onchange="calculate()" />
+                  <div class="weight-info">× 4</div>
+                </td>
+                <td>
+                  <input type="number" id="eq-complex" min="0" value="2" onchange="calculate()" />
+                  <div class="weight-info">× 6</div>
+                </td>
+                <td><span id="eq-count">0</span></td>
+                <td><span id="eq-subtotal">0</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <strong>Internal Logical Files (ILF)</strong>
+                </td>
+                <td>
+                  <input type="number" id="ilf-simple" min="0" value="3" onchange="calculate()" />
+                  <div class="weight-info">× 7</div>
+                </td>
+                <td>
+                  <input type="number" id="ilf-average" min="0" value="5" onchange="calculate()" />
+                  <div class="weight-info">× 10</div>
+                </td>
+                <td>
+                  <input type="number" id="ilf-complex" min="0" value="2" onchange="calculate()" />
+                  <div class="weight-info">× 15</div>
+                </td>
+                <td><span id="ilf-count">0</span></td>
+                <td><span id="ilf-subtotal">0</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <strong>External Interface Files (EIF)</strong>
+                </td>
+                <td>
+                  <input type="number" id="eif-simple" min="0" value="2" onchange="calculate()" />
+                  <div class="weight-info">× 5</div>
+                </td>
+                <td>
+                  <input type="number" id="eif-average" min="0" value="3" onchange="calculate()" />
+                  <div class="weight-info">× 7</div>
+                </td>
+                <td>
+                  <input type="number" id="eif-complex" min="0" value="2" onchange="calculate()" />
+                  <div class="weight-info">× 10</div>
+                </td>
+                <td><span id="eif-count">0</span></td>
+                <td><span id="eif-subtotal">0</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Domain Characteristics Table -->
+        <div class="section">
+          <h2 class="section-title">
+            Step 2: Domain Characteristics (Technical Complexity Factor)
+          </h2>
+          <p style="margin-bottom: 20px; color: #666">
+            Rate each characteristic from 0 (No Influence) to 5 (Strong Influence):
+          </p>
+
+          <table class="domain-table">
+            <thead>
+              <tr>
+                <th style="width: 50px">#</th>
+                <th>Characteristic</th>
+                <th style="width: 200px">Degree of Influence (0-5)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>1</td>
+                <td>Data Communications</td>
+                <td>
+                  <select id="dc-1" onchange="calculate()">
+                    <option value="0">0 - No Influence</option>
+                    <option value="1">1 - Incidental</option>
+                    <option value="2">2 - Moderate</option>
+                    <option value="3">3 - Average</option>
+                    <option value="4" selected>4 - Significant</option>
+                    <option value="5">5 - Strong</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td>2</td>
+                <td>Distributed Data Processing</td>
+                <td>
+                  <select id="dc-2" onchange="calculate()">
+                    <option value="0">0 - No Influence</option>
+                    <option value="1">1 - Incidental</option>
+                    <option value="2">2 - Moderate</option>
+                    <option value="3" selected>3 - Average</option>
+                    <option value="4">4 - Significant</option>
+                    <option value="5">5 - Strong</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td>3</td>
+                <td>Performance</td>
+                <td>
+                  <select id="dc-3" onchange="calculate()">
+                    <option value="0">0 - No Influence</option>
+                    <option value="1">1 - Incidental</option>
+                    <option value="2">2 - Moderate</option>
+                    <option value="3" selected>3 - Average</option>
+                    <option value="4">4 - Significant</option>
+                    <option value="5">5 - Strong</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td>4</td>
+                <td>Heavily Used Configuration</td>
+                <td>
+                  <select id="dc-4" onchange="calculate()">
+                    <option value="0">0 - No Influence</option>
+                    <option value="1">1 - Incidental</option>
+                    <option value="2">2 - Moderate</option>
+                    <option value="3" selected>3 - Average</option>
+                    <option value="4">4 - Significant</option>
+                    <option value="5">5 - Strong</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td>5</td>
+                <td>Transaction Rate</td>
+                <td>
+                  <select id="dc-5" onchange="calculate()">
+                    <option value="0">0 - No Influence</option>
+                    <option value="1">1 - Incidental</option>
+                    <option value="2">2 - Moderate</option>
+                    <option value="3" selected>3 - Average</option>
+                    <option value="4">4 - Significant</option>
+                    <option value="5">5 - Strong</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td>6</td>
+                <td>Online Data Entry</td>
+                <td>
+                  <select id="dc-6" onchange="calculate()">
+                    <option value="0">0 - No Influence</option>
+                    <option value="1">1 - Incidental</option>
+                    <option value="2">2 - Moderate</option>
+                    <option value="3">3 - Average</option>
+                    <option value="4" selected>4 - Significant</option>
+                    <option value="5">5 - Strong</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td>7</td>
+                <td>End-User Efficiency</td>
+                <td>
+                  <select id="dc-7" onchange="calculate()">
+                    <option value="0">0 - No Influence</option>
+                    <option value="1">1 - Incidental</option>
+                    <option value="2">2 - Moderate</option>
+                    <option value="3">3 - Average</option>
+                    <option value="4" selected>4 - Significant</option>
+                    <option value="5">5 - Strong</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td>8</td>
+                <td>Online Update</td>
+                <td>
+                  <select id="dc-8" onchange="calculate()">
+                    <option value="0">0 - No Influence</option>
+                    <option value="1">1 - Incidental</option>
+                    <option value="2">2 - Moderate</option>
+                    <option value="3">3 - Average</option>
+                    <option value="4" selected>4 - Significant</option>
+                    <option value="5">5 - Strong</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td>9</td>
+                <td>Complex Processing</td>
+                <td>
+                  <select id="dc-9" onchange="calculate()">
+                    <option value="0">0 - No Influence</option>
+                    <option value="1">1 - Incidental</option>
+                    <option value="2">2 - Moderate</option>
+                    <option value="3" selected>3 - Average</option>
+                    <option value="4">4 - Significant</option>
+                    <option value="5">5 - Strong</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td>10</td>
+                <td>Reusability</td>
+                <td>
+                  <select id="dc-10" onchange="calculate()">
+                    <option value="0">0 - No Influence</option>
+                    <option value="1">1 - Incidental</option>
+                    <option value="2">2 - Moderate</option>
+                    <option value="3" selected>3 - Average</option>
+                    <option value="4">4 - Significant</option>
+                    <option value="5">5 - Strong</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td>11</td>
+                <td>Installation Ease</td>
+                <td>
+                  <select id="dc-11" onchange="calculate()">
+                    <option value="0">0 - No Influence</option>
+                    <option value="1">1 - Incidental</option>
+                    <option value="2" selected>2 - Moderate</option>
+                    <option value="3">3 - Average</option>
+                    <option value="4">4 - Significant</option>
+                    <option value="5">5 - Strong</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td>12</td>
+                <td>Operational Ease</td>
+                <td>
+                  <select id="dc-12" onchange="calculate()">
+                    <option value="0">0 - No Influence</option>
+                    <option value="1">1 - Incidental</option>
+                    <option value="2">2 - Moderate</option>
+                    <option value="3" selected>3 - Average</option>
+                    <option value="4">4 - Significant</option>
+                    <option value="5">5 - Strong</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td>13</td>
+                <td>Multiple Sites</td>
+                <td>
+                  <select id="dc-13" onchange="calculate()">
+                    <option value="0">0 - No Influence</option>
+                    <option value="1">1 - Incidental</option>
+                    <option value="2" selected>2 - Moderate</option>
+                    <option value="3">3 - Average</option>
+                    <option value="4">4 - Significant</option>
+                    <option value="5">5 - Strong</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td>14</td>
+                <td>Facilitate Change</td>
+                <td>
+                  <select id="dc-14" onchange="calculate()">
+                    <option value="0">0 - No Influence</option>
+                    <option value="1">1 - Incidental</option>
+                    <option value="2">2 - Moderate</option>
+                    <option value="3" selected>3 - Average</option>
+                    <option value="4">4 - Significant</option>
+                    <option value="5">5 - Strong</option>
+                  </select>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <button class="calculate-btn" onclick="calculate()">Calculate Function Points</button>
+
+        <!-- Results Section -->
+        <div class="results" id="results">
+          <h2 class="section-title">Calculation Results</h2>
+
+          <div class="calculation-steps">
+            <h3>Calculation Breakdown:</h3>
+
+            <p><strong>External Inputs (EI):</strong></p>
+            <div class="formula" id="ei-calc"></div>
+
+            <p><strong>External Outputs (EO):</strong></p>
+            <div class="formula" id="eo-calc"></div>
+
+            <p><strong>External Inquiries (EQ):</strong></p>
+            <div class="formula" id="eq-calc"></div>
+
+            <p><strong>Internal Logical Files (ILF):</strong></p>
+            <div class="formula" id="ilf-calc"></div>
+
+            <p><strong>External Interface Files (EIF):</strong></p>
+            <div class="formula" id="eif-calc"></div>
+          </div>
+
+          <div class="result-item">
+            <span class="result-label">Unadjusted Function Points (UFP):</span>
+            <span class="result-value" id="ufp-result">0</span>
+          </div>
+
+          <div class="result-item">
+            <span class="result-label">Total Degree of Influence (TDI):</span>
+            <span class="result-value" id="tdi-result">0</span>
+          </div>
+
+          <div class="result-item">
+            <span class="result-label">Value Adjustment Factor (VAF):</span>
+            <span class="result-value" id="vaf-result">0.00</span>
+          </div>
+
+          <div class="calculation-steps">
+            <h3>Final Calculation:</h3>
+            <div class="formula" id="final-calc"></div>
+          </div>
+
+          <div class="final-result">
+            <div>Final Function Points (FP)</div>
+            <div style="font-size: 2em; margin-top: 10px" id="fp-result">0.00</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function calculate() {
+        // Complexity weights
+        const weights = {
+          ei: [3, 4, 6],
+          eo: [4, 5, 7],
+          eq: [3, 4, 6],
+          ilf: [7, 10, 15],
+          eif: [5, 7, 10],
+        };
+
+        // Calculate UFP for each function type
+        const eiSimple = parseInt(document.getElementById('ei-simple').value) || 0;
+        const eiAverage = parseInt(document.getElementById('ei-average').value) || 0;
+        const eiComplex = parseInt(document.getElementById('ei-complex').value) || 0;
+        const eiCount = eiSimple + eiAverage + eiComplex;
+        const eiTotal =
+          eiSimple * weights.ei[0] + eiAverage * weights.ei[1] + eiComplex * weights.ei[2];
+        document.getElementById('ei-count').textContent = eiCount;
+        document.getElementById('ei-subtotal').textContent = eiTotal;
+        document.getElementById('ei-calc').textContent =
+          `(${eiSimple} × 3) + (${eiAverage} × 4) + (${eiComplex} × 6) = ${eiTotal}`;
+
+        const eoSimple = parseInt(document.getElementById('eo-simple').value) || 0;
+        const eoAverage = parseInt(document.getElementById('eo-average').value) || 0;
+        const eoComplex = parseInt(document.getElementById('eo-complex').value) || 0;
+        const eoCount = eoSimple + eoAverage + eoComplex;
+        const eoTotal =
+          eoSimple * weights.eo[0] + eoAverage * weights.eo[1] + eoComplex * weights.eo[2];
+        document.getElementById('eo-count').textContent = eoCount;
+        document.getElementById('eo-subtotal').textContent = eoTotal;
+        document.getElementById('eo-calc').textContent =
+          `(${eoSimple} × 4) + (${eoAverage} × 5) + (${eoComplex} × 7) = ${eoTotal}`;
+
+        const eqSimple = parseInt(document.getElementById('eq-simple').value) || 0;
+        const eqAverage = parseInt(document.getElementById('eq-average').value) || 0;
+        const eqComplex = parseInt(document.getElementById('eq-complex').value) || 0;
+        const eqCount = eqSimple + eqAverage + eqComplex;
+        const eqTotal =
+          eqSimple * weights.eq[0] + eqAverage * weights.eq[1] + eqComplex * weights.eq[2];
+        document.getElementById('eq-count').textContent = eqCount;
+        document.getElementById('eq-subtotal').textContent = eqTotal;
+        document.getElementById('eq-calc').textContent =
+          `(${eqSimple} × 3) + (${eqAverage} × 4) + (${eqComplex} × 6) = ${eqTotal}`;
+
+        const ilfSimple = parseInt(document.getElementById('ilf-simple').value) || 0;
+        const ilfAverage = parseInt(document.getElementById('ilf-average').value) || 0;
+        const ilfComplex = parseInt(document.getElementById('ilf-complex').value) || 0;
+        const ilfCount = ilfSimple + ilfAverage + ilfComplex;
+        const ilfTotal =
+          ilfSimple * weights.ilf[0] + ilfAverage * weights.ilf[1] + ilfComplex * weights.ilf[2];
+        document.getElementById('ilf-count').textContent = ilfCount;
+        document.getElementById('ilf-subtotal').textContent = ilfTotal;
+        document.getElementById('ilf-calc').textContent =
+          `(${ilfSimple} × 7) + (${ilfAverage} × 10) + (${ilfComplex} × 15) = ${ilfTotal}`;
+
+        const eifSimple = parseInt(document.getElementById('eif-simple').value) || 0;
+        const eifAverage = parseInt(document.getElementById('eif-average').value) || 0;
+        const eifComplex = parseInt(document.getElementById('eif-complex').value) || 0;
+        const eifCount = eifSimple + eifAverage + eifComplex;
+        const eifTotal =
+          eifSimple * weights.eif[0] + eifAverage * weights.eif[1] + eifComplex * weights.eif[2];
+        document.getElementById('eif-count').textContent = eifCount;
+        document.getElementById('eif-subtotal').textContent = eifTotal;
+        document.getElementById('eif-calc').textContent =
+          `(${eifSimple} × 5) + (${eifAverage} × 7) + (${eifComplex} × 10) = ${eifTotal}`;
+
+        // Calculate UFP
+        const ufp = eiTotal + eoTotal + eqTotal + ilfTotal + eifTotal;
+        document.getElementById('ufp-result').textContent = ufp;
+
+        // Calculate TDI (Total Degree of Influence)
+        let tdi = 0;
+        for (let i = 1; i <= 14; i++) {
+          tdi += parseInt(document.getElementById(`dc-${i}`).value);
+        }
+        document.getElementById('tdi-result').textContent = tdi;
+
+        // Calculate VAF (Value Adjustment Factor)
+        const vaf = tdi * 0.01 + 0.65;
+        document.getElementById('vaf-result').textContent = vaf.toFixed(2);
+
+        // Calculate Final FP
+        const fp = ufp * vaf;
+        document.getElementById('fp-result').textContent = fp.toFixed(2);
+
+        // Show final calculation formula
+        document.getElementById('final-calc').textContent =
+          `FP = UFP × VAF = ${ufp} × ${vaf.toFixed(2)} = ${fp.toFixed(2)}`;
+
+        // Show results section
+        document.getElementById('results').classList.add('show');
+      }
+
+      // Initialize calculation on page load
+      window.onload = function () {
+        calculate();
+      };
+    </script>
+  </body>
+</html>

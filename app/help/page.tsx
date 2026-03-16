@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { Fragment, useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 
@@ -52,9 +52,9 @@ const faqs: FAQItem[] = [
     answer: "You must be assigned to a building before creating tickets. Join a building using a building code from your administrator, or contact support for assistance."
   },
   {
-    category: "Billing",
-    question: "Is FixItNow free to use?",
-    answer: "FixItNow offers both free and premium plans. The free plan includes basic ticket management features. Premium plans offer advanced analytics, priority support, and additional features for buildings."
+    category: "Platform",
+    question: "Who can use AI predictions and analytics?",
+    answer: "All authenticated users can access AI predictions and analytics features. There are no feature tiers or role-based paywalls."
   },
   {
     category: "Security",
@@ -91,6 +91,50 @@ export default function HelpPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages, isTyping]);
 
+  const renderMessageWithLinks = (message: string) => {
+    const markdownLinkRegex = /\[([^\]]+)\]\((\/[^)\s]+)\)/g;
+    const lines = message.split("\n");
+
+    return lines.map((line, lineIndex) => {
+      const parts: React.ReactNode[] = [];
+      let lastIndex = 0;
+      let match: RegExpExecArray | null;
+
+      markdownLinkRegex.lastIndex = 0;
+      while ((match = markdownLinkRegex.exec(line)) !== null) {
+        const [fullMatch, label, href] = match;
+        const matchStart = match.index;
+
+        if (matchStart > lastIndex) {
+          parts.push(line.slice(lastIndex, matchStart));
+        }
+
+        parts.push(
+          <a
+            key={`msg-link-${lineIndex}-${matchStart}`}
+            href={href}
+            className="underline decoration-blue-400 underline-offset-2 hover:text-blue-600 dark:hover:text-blue-300 font-medium"
+          >
+            {label}
+          </a>
+        );
+
+        lastIndex = matchStart + fullMatch.length;
+      }
+
+      if (lastIndex < line.length) {
+        parts.push(line.slice(lastIndex));
+      }
+
+      return (
+        <Fragment key={`msg-line-${lineIndex}`}>
+          {parts}
+          {lineIndex < lines.length - 1 && <br />}
+        </Fragment>
+      );
+    });
+  };
+
   const getBotResponse = (userMessage: string): string => {
     const lowerMessage = userMessage.toLowerCase();
 
@@ -112,39 +156,59 @@ export default function HelpPage() {
 
     // Specific keywords with better matching
     if (lowerMessage.includes("ticket") && (lowerMessage.includes("create") || lowerMessage.includes("make") || lowerMessage.includes("new"))) {
-      return "To create a ticket:\n1. Go to your Dashboard\n2. Click 'Create Ticket'\n3. Fill in the details (title, description, category)\n4. Submit\n\nYour ticket will be sent to the maintenance team immediately!";
+      return "To create a ticket:\n1. Open [Dashboard](/dashboard)\n2. Click 'Create Ticket'\n3. Fill title, description, category, and priority\n4. Submit\n\nUseful pages:\n• [Go to Dashboard](/dashboard)\n• [View All Tickets](/tickets)";
     }
 
     if (lowerMessage.includes("ticket") && lowerMessage.includes("status")) {
-      return "You can track your ticket status on the Tickets page. Each ticket shows its current status (open, in-progress, resolved, closed) and any updates from technicians.";
+      return "You can track ticket status on [Tickets](/tickets). Each ticket shows status (open, in-progress, resolved, closed) and timeline updates from technicians.";
     }
 
     if (lowerMessage.includes("join") && lowerMessage.includes("building")) {
-      return "To join a building:\n1. Get a join code from your building administrator\n2. Go to Settings > Profile\n3. Enter the code in 'Join Building'\n4. Click 'Join'\n\nYou'll then be able to create tickets for that building!";
+      return "To join a building:\n1. Get a join code from your building administrator\n2. Open [Dashboard](/dashboard) and use the 'Join Your Building' banner\n3. Enter the code and confirm\n\nAfter joining, you can create tickets for that building.";
+    }
+
+    if (lowerMessage.includes("prediction") || lowerMessage.includes("predict") || lowerMessage.includes("ai")) {
+      return "You can view AI predictions here:\n• [Open Predictions](/predictions)\n\nFrom there you can filter by building and review risk levels, factors, and recommended actions.";
+    }
+
+    if (lowerMessage.includes("analytics") || lowerMessage.includes("report") || lowerMessage.includes("stats")) {
+      return "For analytics and reports, use:\n• [Open Analytics](/analytics)\n• [Open Reports](/reports)\n\nYou can review trends, ticket performance, and building-level summaries.";
+    }
+
+    if (lowerMessage.includes("profile") || lowerMessage.includes("account")) {
+      return "For profile and account management:\n• [Open Profile](/profile)\n• [Open Settings](/settings)\n\nYou can update your account details and preferences there.";
+    }
+
+    if (lowerMessage.includes("technician") || lowerMessage.includes("tech")) {
+      return "Technician-related pages:\n• [Open Technicians](/technicians)\n• [Open Tickets](/tickets)\n\nAdmins can assign technicians from ticket details.";
+    }
+
+    if (lowerMessage.includes("building") && (lowerMessage.includes("manage") || lowerMessage.includes("details") || lowerMessage.includes("owner"))) {
+      return "For building management:\n• [Open Buildings](/buildings)\n\nYou can view building details, members, and ownership info there.";
     }
 
     if (lowerMessage.includes("help") || lowerMessage.includes("support")) {
-      return "I'm here to help! You can:\n• Browse our FAQ section below\n• Email us at support@fixitnow.com\n• Call our support line: 1-800-FIX-NOW\n• Or ask me more specific questions!";
-    }
-
-    if (lowerMessage.includes("price") || lowerMessage.includes("cost") || lowerMessage.includes("pricing") || lowerMessage.includes("free")) {
-      return "FixItNow offers:\n• Free Plan: Basic ticket management\n• Premium Plan ($9.99/month): Advanced analytics, priority support, unlimited file uploads\n• Enterprise Plan (Custom): For large buildings with advanced needs\n\nWould you like to know more about a specific plan?";
+      return "I'm here to help! Quick links:\n• [Dashboard](/dashboard)\n• [Tickets](/tickets)\n• [Predictions](/predictions)\n• [Analytics](/analytics)\n• [Settings](/settings)\n\nOr email support@fixitnow.com for direct assistance.";
     }
 
     if (lowerMessage.includes("thank")) {
-      return "You're very welcome! 😊 Let me know if you need anything else. I'm here to help!";
+      return "You're very welcome! Let me know if you need anything else. I'm here to help!";
     }
 
     if (lowerMessage.includes("bye") || lowerMessage.includes("goodbye")) {
-      return "Goodbye! Feel free to come back anytime you need help. Have a great day! ✨";
+      return "Goodbye! Feel free to come back anytime you need help. Have a great day!";
     }
 
     if (lowerMessage.includes("upload") || lowerMessage.includes("file")) {
       return "You can upload:\n• Images: JPEG, PNG, GIF (under 5MB each)\n• Documents: PDF (under 5MB)\n• Maximum 3 files per ticket\n\nMake sure files are clear and relevant to your issue!";
     }
 
+    if (lowerMessage.includes("where") || lowerMessage.includes("go to") || lowerMessage.includes("open page") || lowerMessage.includes("link")) {
+      return "Here are common pages:\n• [Dashboard](/dashboard)\n• [Tickets](/tickets)\n• [Predictions](/predictions)\n• [Buildings](/buildings)\n• [Profile](/profile)\n• [Settings](/settings)\n• [Help](/help)";
+    }
+
     // Default response
-    return "I'm not sure about that specific question, but I'd be happy to help! Could you:\n• Rephrase your question\n• Check the FAQ section below\n• Or email support@fixitnow.com for detailed assistance\n\nWhat else can I help you with?";
+    return "I can help with tickets, predictions, buildings, analytics, and account settings.\n\nTry one of these:\n• 'How do I create a ticket?'\n• 'Open predictions page'\n• 'Where can I see analytics?'\n• 'How do I join a building?'\n\nQuick links:\n• [Dashboard](/dashboard)\n• [Tickets](/tickets)\n• [Predictions](/predictions)";
   };
 
   const handleSendMessage = () => {
@@ -493,7 +557,7 @@ export default function HelpPage() {
                 <div className="px-4 pt-4">
                   <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Quick questions:</p>
                   <div className="flex flex-wrap gap-2">
-                    {["How to create ticket?", "Join building?", "File uploads?"].map((q, i) => (
+                    {["How to create ticket?", "Join building?", "Open predictions page", "Where is analytics?"].map((q, i) => (
                       <motion.button
                         key={i}
                         whileHover={{ scale: 1.05 }}
@@ -527,7 +591,7 @@ export default function HelpPage() {
                             : "bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 shadow-sm"
                         }`}
                       >
-                        <p className="text-sm whitespace-pre-line leading-relaxed">{msg.message}</p>
+                        <p className="text-sm whitespace-pre-line leading-relaxed">{renderMessageWithLinks(msg.message)}</p>
                       </div>
                     </motion.div>
                   ))}

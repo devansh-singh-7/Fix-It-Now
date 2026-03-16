@@ -5,7 +5,7 @@ import type { TicketStatus, UserRole } from '@/app/lib/types';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { ticketId, status, userId, userName, role, note } = body;
+    const { ticketId, status, userId, userName, role, note, completionImageUrls, completionImagePublicIds } = body;
 
     if (!ticketId || !status || !userId || !userName || !role) {
       return NextResponse.json(
@@ -24,13 +24,33 @@ export async function POST(request: Request) {
       userId,
       userName,
       role as UserRole,
-      note
+      note,
+      completionImageUrls,
+      completionImagePublicIds
     );
 
     if (!result.success) {
+      const errorMessage = result.error || 'Not authorized to update ticket';
+      const lowerError = errorMessage.toLowerCase();
+
+      let statusCode = 403;
+      if (lowerError.includes('not found')) {
+        statusCode = 404;
+      } else if (lowerError.includes('cannot transition')) {
+        statusCode = 400;
+      }
+
+      console.warn('[tickets/update-status] Rejected request:', {
+        ticketId,
+        userId,
+        role,
+        status,
+        error: errorMessage,
+      });
+
       return NextResponse.json(
-        { success: false, error: result.error },
-        { status: 403 }
+        { success: false, error: errorMessage },
+        { status: statusCode }
       );
     }
 

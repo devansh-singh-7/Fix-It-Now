@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getDatabase } from '@/app/lib/mongodb';
 import { requireAdminOrOwner } from '@/app/lib/server-auth';
+import { isSuperAdmin } from '@/app/lib/database';
 
 /**
  * GET /api/buildings/list
  * 
  * Returns all active buildings for the building selector
+ * - Super admins see ALL buildings
+ * - Regular admins see only their buildings
  */
 export async function GET(request: Request) {
   try {
@@ -16,13 +19,25 @@ export async function GET(request: Request) {
 
     const db = await getDatabase();
     
+    // Check if user is super admin
+    const isSuper = await isSuperAdmin(authResult.user.uid);
+    
+    // Build query - super admins see all buildings, regular admins see only their buildings
+    const query: Record<string, unknown> = {
+      isActive: { $ne: false }
+    };
+    
+    if (!isSuper) {
+      query.adminId = authResult.user.uid;
+    }
+    
+    console.log('Buildings list query:', { isSuperAdmin: isSuper, uid: authResult.user.uid, query });
+    
     const buildings = await db.collection('buildings')
-      .find({
-        isActive: { $ne: false },
-        adminId: authResult.user.uid,
-      })
+      .find(query)
       .project({
         _id: 1,
+        id: 1,
         name: 1,
         address: 1,
         state: 1,
@@ -33,8 +48,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
-      buildings: buildings.map(b => ({
-        id: b._id.toString(),
+      data: buildings.map(b => ({
+        id: b.id || b._id.toString(),
         name: b.name,
         address: b.address,
         state: b.state,

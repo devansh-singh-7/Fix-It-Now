@@ -69,6 +69,8 @@ export async function POST(
     const now = new Date();
     const maintenanceLog = {
       buildingId: id,
+      assetName: parsed.data.assetName?.trim(),
+      assetType: parsed.data.assetType,
       maintenanceType: parsed.data.maintenanceType,
       actionTaken: parsed.data.actionTaken.trim(),
       dateCompleted: parsed.data.dateCompleted,

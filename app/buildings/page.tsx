@@ -73,6 +73,20 @@ export default function BuildingManagementPage() {
 
   // Search state for building list filtering
   const [buildingSearchQuery, setBuildingSearchQuery] = useState('');
+  const [selectedStateFilter, setSelectedStateFilter] = useState('all');
+
+  const fetchBuildingsFromDatabase = async (uid: string) => {
+    const buildingsRes = await fetch('/api/buildings/list-for-admin', {
+      headers: {
+        'x-user-id': uid,
+      },
+    });
+
+    const buildingsData = await buildingsRes.json();
+    if (buildingsData.buildings) {
+      setBuildings(buildingsData.buildings);
+    }
+  };
 
   // Load all buildings for this admin
   useEffect(() => {
@@ -85,16 +99,7 @@ export default function BuildingManagementPage() {
       }
 
       try {
-        const buildingsRes = await fetch('/api/buildings/list-for-admin', {
-          headers: {
-            'x-user-id': user.uid,
-          },
-        });
-        const buildingsData = await buildingsRes.json();
-
-        if (buildingsData.buildings) {
-          setBuildings(buildingsData.buildings);
-        }
+        await fetchBuildingsFromDatabase(user.uid);
       } catch (err) {
         console.error('Error loading buildings:', err);
       } finally {
@@ -149,18 +154,8 @@ export default function BuildingManagementPage() {
         throw new Error(result.error || 'Failed to create building');
       }
 
-      const building = result.data;
-      const newBuilding = {
-        id: building.id,
-        name: building.name,
-        address: building.address,
-        state: building.state,
-        area: building.area,
-        joinCode: building.joinCode,
-        adminId: building.adminId,
-      };
-
-      setBuildings((prev) => [newBuilding, ...prev]);
+      // Reload from database so UI always reflects persisted server state.
+      await fetchBuildingsFromDatabase(auth.currentUser.uid);
       setSuccess('Building created successfully!');
       setBuildingName('');
       setBuildingAddress('');
@@ -210,8 +205,8 @@ export default function BuildingManagementPage() {
         throw new Error(result.error || 'Failed to delete building');
       }
 
-      // Remove from local state
-      setBuildings((prev) => prev.filter((b) => b.id !== buildingId));
+      // Reload from database to keep list authoritative.
+      await fetchBuildingsFromDatabase(auth.currentUser.uid);
       setSuccess('Building deleted successfully');
     } catch (err) {
       console.error('Error deleting building:', err);
@@ -337,8 +332,24 @@ export default function BuildingManagementPage() {
     }
   };
 
+  const filteredBuildings = buildings.filter((b) => {
+    const query = buildingSearchQuery.trim().toLowerCase();
+    const matchesQuery =
+      query.length === 0 ||
+      b.name.toLowerCase().includes(query) ||
+      b.address.toLowerCase().includes(query) ||
+      b.state?.toLowerCase().includes(query) ||
+      b.area?.toLowerCase().includes(query);
+
+    const matchesState = selectedStateFilter === 'all' || b.state === selectedStateFilter;
+
+    return matchesQuery && matchesState;
+  });
+
+  const availableStates = Array.from(new Set(buildings.map((b) => b.state).filter(Boolean))).sort();
+
   return (
-    <RouteGuard allowedRoles={['admin']}>
+    <RouteGuard allowedRoles={['admin', 'owner']}>
       <div className="min-h-screen bg-linear-to-br from-gray-50 via-white to-gray-100 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 relative overflow-hidden">
         {/* Enhanced Background Pattern */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
@@ -684,71 +695,72 @@ export default function BuildingManagementPage() {
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
                       Your Buildings
                       <span className="px-3 py-1 text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded-full">
-                        {
-                          buildings.filter(
-                            (b) =>
-                              b.name.toLowerCase().includes(buildingSearchQuery.toLowerCase()) ||
-                              b.address.toLowerCase().includes(buildingSearchQuery.toLowerCase()) ||
-                              b.state?.toLowerCase().includes(buildingSearchQuery.toLowerCase()) ||
-                              b.area?.toLowerCase().includes(buildingSearchQuery.toLowerCase())
-                          ).length
-                        }
+                        {filteredBuildings.length}
                       </span>
                     </h2>
 
-                    {/* Search Input */}
-                    <div className="relative w-full sm:w-auto sm:min-w-[300px]">
-                      <svg
-                        className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                        />
-                      </svg>
-                      <input
-                        type="text"
-                        value={buildingSearchQuery}
-                        onChange={(e) => setBuildingSearchQuery(e.target.value)}
-                        placeholder="Search buildings..."
-                        className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-white/50 dark:bg-gray-800/50 border border-gray-300/50 dark:border-gray-700/50 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-300"
-                      />
-                      {buildingSearchQuery && (
-                        <button
-                          onClick={() => setBuildingSearchQuery('')}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    {/* Search + State Filter */}
+                    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto sm:min-w-[420px]">
+                      <div className="relative flex-1">
+                        <svg
+                          className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
                         >
-                          <svg
-                            className="w-5 h-5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                          />
+                        </svg>
+                        <input
+                          type="text"
+                          value={buildingSearchQuery}
+                          onChange={(e) => setBuildingSearchQuery(e.target.value)}
+                          placeholder="Search buildings..."
+                          className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-white/50 dark:bg-gray-800/50 border border-gray-300/50 dark:border-gray-700/50 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-300"
+                        />
+                        {buildingSearchQuery && (
+                          <button
+                            onClick={() => setBuildingSearchQuery('')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M6 18L18 6M6 6l12 12"
-                            />
-                          </svg>
-                        </button>
-                      )}
+                            <svg
+                              className="w-5 h-5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M6 18L18 6M6 6l12 12"
+                              />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+
+                      <select
+                        value={selectedStateFilter}
+                        onChange={(e) => setSelectedStateFilter(e.target.value)}
+                        className="px-4 py-2.5 rounded-xl bg-white/50 dark:bg-gray-800/50 border border-gray-300/50 dark:border-gray-700/50 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-300"
+                      >
+                        <option value="all">All states</option>
+                        {availableStates.map((state) => (
+                          <option key={state} value={state}>
+                            {state}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 
                   <div className="space-y-6">
-                    {buildings.filter(
-                      (b) =>
-                        b.name.toLowerCase().includes(buildingSearchQuery.toLowerCase()) ||
-                        b.address.toLowerCase().includes(buildingSearchQuery.toLowerCase()) ||
-                        b.state?.toLowerCase().includes(buildingSearchQuery.toLowerCase()) ||
-                        b.area?.toLowerCase().includes(buildingSearchQuery.toLowerCase())
-                    ).length === 0 ? (
+                    {filteredBuildings.length === 0 ? (
                       <div className="text-center py-12 rounded-2xl bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border border-gray-200/80 dark:border-gray-800/80">
                         <svg
                           className="w-16 h-16 mx-auto text-gray-400 dark:text-gray-600 mb-4"
@@ -764,25 +776,20 @@ export default function BuildingManagementPage() {
                           />
                         </svg>
                         <p className="text-gray-600 dark:text-gray-400 font-medium">
-                          No buildings found matching &ldquo;{buildingSearchQuery}&rdquo;
+                          No buildings found with the selected filters
                         </p>
                         <button
-                          onClick={() => setBuildingSearchQuery('')}
+                          onClick={() => {
+                            setBuildingSearchQuery('');
+                            setSelectedStateFilter('all');
+                          }}
                           className="mt-4 px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
                         >
-                          Clear search
+                          Clear filters
                         </button>
                       </div>
                     ) : (
-                      buildings
-                        .filter(
-                          (b) =>
-                            b.name.toLowerCase().includes(buildingSearchQuery.toLowerCase()) ||
-                            b.address.toLowerCase().includes(buildingSearchQuery.toLowerCase()) ||
-                            b.state?.toLowerCase().includes(buildingSearchQuery.toLowerCase()) ||
-                            b.area?.toLowerCase().includes(buildingSearchQuery.toLowerCase())
-                        )
-                        .map((building, index) => (
+                      filteredBuildings.map((building, index) => (
                           <motion.div
                             key={building.id}
                             initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }}
@@ -1008,7 +1015,36 @@ export default function BuildingManagementPage() {
                     )}
                   </div>
                 </motion.div>
-              ) : null}
+              ) : (
+                <motion.div
+                  initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2, duration: 0.4 }}
+                  className="rounded-2xl bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border border-gray-200/80 dark:border-gray-800/80 p-8"
+                >
+                  <div className="text-center py-8">
+                    <svg
+                      className="w-16 h-16 mx-auto text-gray-400 dark:text-gray-600 mb-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                      />
+                    </svg>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                      No buildings yet
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-400">
+                      Create your first building above and it will appear here automatically.
+                    </p>
+                  </div>
+                </motion.div>
+              )}
             </div>
           </div>
         </div>

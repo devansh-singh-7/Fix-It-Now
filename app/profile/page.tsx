@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import type { SubscriptionPlan, SubscriptionTier } from '@/app/lib/types';
 
 interface UserProfile {
   displayName: string;
@@ -12,16 +11,10 @@ interface UserProfile {
   firebaseUid: string;
   buildingId?: string;
   buildingName?: string;
-  subscriptionPlan?: SubscriptionPlan;
-  subscriptionTier?: SubscriptionTier;
+
 }
 
-// Plan display info
-const PLAN_INFO: Record<SubscriptionPlan, { name: string; color: string; tierLabel: string }> = {
-  'ENTERPRISE': { name: 'Enterprise', color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300', tierLabel: 'Tier 1' },
-  'PRO': { name: 'Pro', color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300', tierLabel: 'Tier 2' },
-  'BASIC': { name: 'Basic', color: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300', tierLabel: 'Tier 3' },
-};
+
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -79,7 +72,7 @@ export default function ProfilePage() {
     );
   }
 
-  const planInfo = profile.subscriptionPlan ? PLAN_INFO[profile.subscriptionPlan] : null;
+
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 py-8">
@@ -117,11 +110,7 @@ export default function ProfilePage() {
               <div>
                 <h2 className="text-2xl font-bold text-white">{profile.displayName || 'User'}</h2>
                 <p className="text-blue-100 capitalize">{profile.role}</p>
-                {planInfo && (
-                  <span className={`inline-flex items-center mt-2 px-3 py-1 rounded-full text-xs font-medium ${planInfo.color}`}>
-                    {planInfo.name} Plan ({planInfo.tierLabel})
-                  </span>
-                )}
+
               </div>
             </div>
           </div>
@@ -185,38 +174,7 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              {/* Subscription Section */}
-              <div className="border-t border-gray-200 dark:border-gray-800 pt-6">
-                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Subscription Plan</h3>
-                {planInfo ? (
-                  <div className="flex items-center gap-3">
-                    <span className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold ${planInfo.color}`}>
-                      {planInfo.name}
-                    </span>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">
-                      {planInfo.tierLabel}
-                    </span>
-                    {profile.subscriptionTier && profile.subscriptionTier <= 2 && (
-                      <span className="inline-flex items-center gap-1 text-sm text-green-600 dark:text-green-400">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        AI Support Access
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-3">
-                    <span className="text-gray-600 dark:text-gray-400">No active subscription</span>
-                    <button
-                      onClick={() => router.push('/#pricing')}
-                      className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-medium"
-                    >
-                      View Plans →
-                    </button>
-                  </div>
-                )}
-              </div>
+
 
               <div className="border-t border-gray-200 dark:border-gray-800 pt-6">
                 <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">User ID</h3>
@@ -242,46 +200,7 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Subscription Benefits Info */}
-        {planInfo && profile.subscriptionTier && (
-          <div className="mt-6 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-100 mb-3">
-              {planInfo.name} Plan Benefits
-            </h3>
-            <ul className="space-y-2">
-              {profile.subscriptionTier <= 2 && (
-                <li className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
-                  <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  AI Support Chatbot Access
-                </li>
-              )}
-              {profile.subscriptionTier <= 2 && (
-                <li className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
-                  <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Priority Support
-                </li>
-              )}
-              {profile.subscriptionTier === 1 && (
-                <li className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
-                  <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Dedicated Account Manager
-                </li>
-              )}
-              <li className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
-                <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                {profile.subscriptionTier === 1 ? 'Unlimited Buildings' : profile.subscriptionTier === 2 ? 'Up to 5 Buildings' : '1 Building'}
-              </li>
-            </ul>
-          </div>
-        )}
+
 
         {/* Additional Info */}
         <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">

@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import type { SubscriptionTier, SubscriptionPlan } from "@/app/lib/types";
 
 // Lazy load heavy components to reduce initial bundle
 const NavBar = dynamic(() => import("@/app/components/NavBar"), {
@@ -40,23 +39,11 @@ const TicketCard = dynamic(() => import("@/app/components/TicketCard"), {
   loading: () => <div className="h-40 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" />
 });
 
-const QuickActions = dynamic(() => import("@/app/components/dashboard/QuickActions").then(mod => mod.QuickActions), {
-  ssr: false,
-  loading: () => <div className="h-64 bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse" />
-});
-
-const RecentActivity = dynamic(() => import("@/app/components/dashboard/RecentActivity").then(mod => mod.RecentActivity), {
-  ssr: false,
-  loading: () => <div className="h-64 bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse" />
-});
-
 
 type User = {
   displayName: string;
   email: string;
   role: 'admin' | 'technician' | 'resident';
-  subscriptionPlan?: SubscriptionPlan;
-  subscriptionTier?: SubscriptionTier;
 };
 
 export default function DashboardPage() {
@@ -71,11 +58,12 @@ export default function DashboardPage() {
   // Real-time data from MongoDB - starts empty, populated by API
   const [statsData, setStatsData] = useState<{
     stats: {
-      total: { value: number; trend: number };
-      open: { value: number; trend: number };
-      inProgress: { value: number; trend: number };
-      completed: { value: number; trend: number };
+      total: { value: number; trend: number; chartData: number[] };
+      open: { value: number; trend: number; chartData: number[] };
+      inProgress: { value: number; trend: number; chartData: number[] };
+      completed: { value: number; trend: number; chartData: number[] };
     };
+    chartLabels: string[];
     recentTickets: Array<Record<string, unknown>>;
   } | null>(null);
 
@@ -95,8 +83,11 @@ export default function DashboardPage() {
   }>>([]);
   const [buildingId, setBuildingId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
-  const [subscriptionTier, setSubscriptionTier] = useState<SubscriptionTier | null>(null);
   const [accessDeniedToast, setAccessDeniedToast] = useState<string | null>(null);
+  
+  // Building filter for admins
+  const [buildings, setBuildings] = useState<Array<{ id: string; name: string; address: string }>>([]);
+  const [selectedBuildingFilter, setSelectedBuildingFilter] = useState<string>('all');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -105,9 +96,12 @@ export default function DashboardPage() {
     const deniedMessage = sessionStorage.getItem('accessDeniedMessage');
 
     if (deniedParam || deniedMessage) {
-      setAccessDeniedToast(
-        deniedMessage || 'Access denied: only building admins/owners can view predictions.'
-      );
+      // Use setTimeout to avoid direct setState in effect
+      setTimeout(() => {
+        setAccessDeniedToast(
+          deniedMessage || 'Access denied: only building admins/owners can view predictions.'
+        );
+      }, 0);
       sessionStorage.removeItem('accessDeniedMessage');
 
       const timeout = setTimeout(() => setAccessDeniedToast(null), 3500);
@@ -180,6 +174,8 @@ export default function DashboardPage() {
         value: String(stats.total.value),
         subtitle: `${stats.total.trend >= 0 ? '+' : ''}${stats.total.trend}% from last month`,
         trend: { value: `${Math.abs(stats.total.trend)}%`, positive: stats.total.trend >= 0 },
+        chartData: stats.total.chartData,
+        chartLabels: statsData.chartLabels,
         icon: (
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -192,6 +188,8 @@ export default function DashboardPage() {
         value: String(stats.open.value),
         subtitle: stats.open.value > 0 ? "Requires attention" : "All clear!",
         trend: { value: `${Math.abs(stats.open.trend)}%`, positive: stats.open.trend <= 0 },
+        chartData: stats.open.chartData,
+        chartLabels: statsData.chartLabels,
         icon: (
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -204,6 +202,8 @@ export default function DashboardPage() {
         value: String(stats.inProgress.value),
         subtitle: `${stats.inProgress.trend >= 0 ? '+' : ''}${stats.inProgress.trend}% from last month`,
         trend: { value: `${Math.abs(stats.inProgress.trend)}%`, positive: stats.inProgress.trend >= 0 },
+        chartData: stats.inProgress.chartData,
+        chartLabels: statsData.chartLabels,
         icon: (
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -216,6 +216,8 @@ export default function DashboardPage() {
         value: String(stats.completed.value),
         subtitle: `${stats.completed.trend >= 0 ? '+' : ''}${stats.completed.trend}% from last month`,
         trend: { value: `${Math.abs(stats.completed.trend)}%`, positive: stats.completed.trend >= 0 },
+        chartData: stats.completed.chartData,
+        chartLabels: statsData.chartLabels,
         icon: (
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -270,20 +272,10 @@ export default function DashboardPage() {
 
           setBuildingId(extractedBuildingId || '');
 
-          // Extract subscription tier (1=Enterprise, 2=Pro, 3=Basic)
-          const extractedTier = profile.subscriptionTier ||
-            (profile.subscriptionPlan === 'ENTERPRISE' ? 1 :
-              profile.subscriptionPlan === 'PRO' ? 2 :
-                profile.subscriptionPlan === 'BASIC' ? 3 : null);
-
-          setSubscriptionTier(extractedTier);
-
-          // Set user with proper role type and subscription
+          // Set user with proper role type
           setUser({
             ...profile,
-            role: extractedRole,
-            subscriptionPlan: profile.subscriptionPlan,
-            subscriptionTier: extractedTier
+            role: extractedRole
           });
 
           console.log('Dashboard loaded for user:', {
@@ -327,6 +319,49 @@ export default function DashboardPage() {
     };
   }, [router]);
 
+  // Fetch all buildings for admin filter
+  useEffect(() => {
+    if (!userId || !user?.role || user.role !== 'admin') {
+      return;
+    }
+
+    const fetchBuildings = async () => {
+      try {
+        const response = await fetch('/api/buildings/list', {
+          headers: {
+            'x-user-id': userId,
+          },
+        });
+        const data = await response.json();
+
+        if (data.success && data.data) {
+          setBuildings(data.data);
+          console.log('Loaded', data.data.length, 'buildings for admin filter');
+        }
+      } catch (error) {
+        console.error('Error fetching buildings for filter:', error);
+      }
+    };
+
+    fetchBuildings();
+  }, [userId, user?.role]);
+
+  // Update buildingId when filter changes
+  useEffect(() => {
+    if (user?.role !== 'admin') {
+      return;
+    }
+
+    // Use setTimeout to avoid direct setState in effect
+    setTimeout(() => {
+      if (selectedBuildingFilter === 'all') {
+        setBuildingId(null); // Show all tickets from all buildings
+      } else {
+        setBuildingId(selectedBuildingFilter); // Show tickets from selected building only
+      }
+    }, 0);
+  }, [selectedBuildingFilter, user?.role]);
+
   // Ref to store fetch function for external calls
   const fetchDashboardStatsRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -359,9 +394,14 @@ export default function DashboardPage() {
         if (data.success) {
           setStatsData(data.data);
           setRecentTickets(data.data.recentTickets || []);
-          console.log('✅ Loaded tickets:', data.data.recentTickets?.length || 0);
+          console.log('Loaded tickets:', data.data.recentTickets?.length || 0);
         } else {
-          console.error('Failed to fetch stats:', data.error);
+          console.error('Failed to fetch stats:', {
+            error: data.error,
+            details: data.details,
+            status: response.status,
+            url,
+          });
         }
       } catch (error) {
         console.error('Error fetching dashboard stats:', error);
@@ -499,8 +539,27 @@ export default function DashboardPage() {
           ))}
         </motion.div>
 
+        {/* Active Filter Indicator for Admins */}
+        {user.role === 'admin' && buildings.length > 0 && (
+          <motion.div
+            initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 px-4 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg inline-flex items-center gap-2"
+          >
+            <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
+              {selectedBuildingFilter === 'all' 
+                ? `Showing tickets from all ${buildings.length} buildings` 
+                : `Showing tickets from: ${buildings.find(b => b.id === selectedBuildingFilter)?.name || 'Selected Building'}`
+              }
+            </span>
+          </motion.div>
+        )}
+
         {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 gap-8">
           {/* Left Column - Tickets */}
           <div className="lg:col-span-2">
             {/* Tickets Header */}
@@ -521,6 +580,27 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
+                  {/* Building Filter for Admins */}
+                  {user.role === 'admin' && buildings.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      </svg>
+                      <select
+                        value={selectedBuildingFilter}
+                        onChange={(e) => setSelectedBuildingFilter(e.target.value)}
+                        className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-gray-400 dark:hover:border-gray-600 transition-colors"
+                      >
+                        <option value="all">All Buildings ({buildings.length})</option>
+                        {buildings.map((building) => (
+                          <option key={building.id} value={building.id}>
+                            {building.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
                   {/* Filter Tabs */}
                   <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
                     {['all', 'open', 'in-progress', 'resolved'].map((filter) => (
@@ -586,8 +666,11 @@ export default function DashboardPage() {
                         }
                       </p>
                       {!hasInvalidUID && !buildingId && (
-                        <p className="text-sm text-amber-600 dark:text-amber-400 mb-4">
-                          ⚠️ You need to join a building to create tickets
+                        <p className="text-sm text-amber-600 dark:text-amber-400 mb-4 inline-flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-7.938 4h15.876c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.33 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          You need to join a building to create tickets
                         </p>
                       )}
                       {!hasInvalidUID && buildingId && (
@@ -637,145 +720,6 @@ export default function DashboardPage() {
             </motion.div>
           </div>
 
-          {/* Right Column - Sidebar */}
-          <div className="space-y-8">
-            {/* Quick Actions */}
-            <motion.div
-              initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: shouldReduceMotion ? 0 : 0.4, delay: 0.3 }}
-            >
-              <QuickActions />
-            </motion.div>
-
-            {/* Recent Activity */}
-            <motion.div
-              initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: shouldReduceMotion ? 0 : 0.4, delay: 0.4 }}
-            >
-              <RecentActivity />
-            </motion.div>
-
-            {/* Performance Metrics */}
-            <motion.div
-              initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: shouldReduceMotion ? 0 : 0.4, delay: 0.5 }}
-              className="bg-linear-to-br from-gray-900 to-black rounded-2xl p-6 text-white"
-            >
-              <h3 className="text-lg font-semibold mb-4">Performance Metrics</h3>
-              <div className="space-y-6">
-                {/* Response Time */}
-                <div className="group">
-                  <div className="flex justify-between text-sm mb-2">
-                    <span className="font-medium">Response Time</span>
-                    <span className="font-bold text-blue-400">2.4h</span>
-                  </div>
-                  <div className="relative h-3 bg-gray-800 rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: "75%" }}
-                      transition={{ duration: 1.2, delay: 0.6, ease: "easeOut" }}
-                      className="h-full bg-linear-to-r from-blue-500 to-blue-400 rounded-full relative overflow-hidden group-hover:shadow-lg group-hover:shadow-blue-500/50 transition-shadow duration-300"
-                    >
-                      <motion.div
-                        className="absolute inset-0 bg-white/20"
-                        initial={{ x: "-100%" }}
-                        animate={{ x: "200%" }}
-                        transition={{
-                          duration: 1.5,
-                          delay: 0.8,
-                          ease: "easeInOut"
-                        }}
-                      />
-                    </motion.div>
-                    {/* Tooltip on hover */}
-                    <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-gray-950 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap shadow-xl border border-gray-700">
-                      Target: 3h | Current: 2.4h
-                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-950 border-r border-b border-gray-700 rotate-45"></div>
-                    </div>
-                  </div>
-                  <div className="mt-1.5 text-xs text-gray-400 flex items-center gap-1">
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                    <span>20% better than last month</span>
-                  </div>
-                </div>
-
-                {/* Resolution Rate */}
-                <div className="group">
-                  <div className="flex justify-between text-sm mb-2">
-                    <span className="font-medium">Resolution Rate</span>
-                    <span className="font-bold text-emerald-400">92%</span>
-                  </div>
-                  <div className="relative h-3 bg-gray-800 rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: "92%" }}
-                      transition={{ duration: 1.2, delay: 0.8, ease: "easeOut" }}
-                      className="h-full bg-linear-to-r from-emerald-500 to-emerald-400 rounded-full relative overflow-hidden group-hover:shadow-lg group-hover:shadow-emerald-500/50 transition-shadow duration-300"
-                    >
-                      <motion.div
-                        className="absolute inset-0 bg-white/20"
-                        initial={{ x: "-100%" }}
-                        animate={{ x: "200%" }}
-                        transition={{
-                          duration: 1.5,
-                          delay: 1.0,
-                          ease: "easeInOut"
-                        }}
-                      />
-                    </motion.div>
-                    {/* Tooltip on hover */}
-                    <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-gray-950 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap shadow-xl border border-gray-700">
-                      Target: 85% | Current: 92%
-                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-950 border-r border-b border-gray-700 rotate-45"></div>
-                    </div>
-                  </div>
-                  <div className="mt-1.5 text-xs text-gray-400 flex items-center gap-1">
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                    <span>Exceeding target by 7%</span>
-                  </div>
-                </div>
-
-                {/* Satisfaction */}
-                <div className="group">
-                  <div className="flex justify-between text-sm mb-2">
-                    <span className="font-medium">Satisfaction</span>
-                    <span className="font-bold text-amber-400">4.8/5</span>
-                  </div>
-                  <div className="relative h-3 bg-gray-800 rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: "96%" }}
-                      transition={{ duration: 1.2, delay: 1.0, ease: "easeOut" }}
-                      className="h-full bg-linear-to-r from-amber-500 to-amber-400 rounded-full relative overflow-hidden group-hover:shadow-lg group-hover:shadow-amber-500/50 transition-shadow duration-300"
-                    >
-                      <motion.div
-                        className="absolute inset-0 bg-white/20"
-                        initial={{ x: "-100%" }}
-                        animate={{ x: "200%" }}
-                        transition={{
-                          duration: 1.5,
-                          delay: 1.2,
-                          ease: "easeInOut"
-                        }}
-                      />
-                    </motion.div>
-                    {/* Tooltip on hover */}
-                    <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-gray-950 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap shadow-xl border border-gray-700">
-                      Target: 4.5 | Current: 4.8
-                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-950 border-r border-b border-gray-700 rotate-45"></div>
-                    </div>
-                  </div>
-                  <div className="mt-1.5 text-xs text-gray-400 flex items-center gap-1">
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                    <span>Top rated this quarter</span>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </div>
         </div>
 
         {/* Role-specific Panels */}
@@ -867,10 +811,7 @@ export default function DashboardPage() {
         }}
       />
 
-      {/* Support Chatbot - for Pro/Enterprise subscribers OR admins */}
-      {(user.role === 'admin' || (subscriptionTier && subscriptionTier <= 2)) && (
-        <SupportChatBot />
-      )}
+      <SupportChatBot />
     </div>
   );
 }

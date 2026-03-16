@@ -68,6 +68,9 @@ export async function GET(request: Request) {
       filter.assignedTo = uid;
     } else if (role === 'resident') {
       filter.createdBy = uid;
+    } else if (role === 'owner') {
+      // Building owners see all tickets for their building (like admin)
+      // filter.buildingId should already be set above
     }
     // Admin sees all tickets (filtered by building if specified, otherwise all)
 
@@ -76,81 +79,136 @@ export async function GET(request: Request) {
     const lastMonth = new Date();
     lastMonth.setMonth(lastMonth.getMonth() - 1);
 
-    // Single Aggregation Query using $facet
-    const [result] = await ticketsCollection.aggregate([
-      { $match: filter },
-      {
-        $facet: {
-          // Current Totals
-          total: [{ $count: "count" }],
-          open: [{ $match: { status: "open" } }, { $count: "count" }],
-          inProgress: [{ $match: { status: { $in: ['assigned', 'accepted', 'in_progress'] } } }, { $count: "count" }],
-          completed: [{ $match: { status: "completed" } }, { $count: "count" }],
+    // Get last 7 days for trend chart (including today)
+    const last7Days = new Date();
+    last7Days.setDate(last7Days.getDate() - 6);
+    last7Days.setHours(0, 0, 0, 0);
 
-          // Last Month Totals (for trends)
-          totalLastMonth: [{ $match: { createdAt: { $lt: lastMonth } } }, { $count: "count" }],
-          openLastMonth: [{ $match: { status: "open", createdAt: { $lt: lastMonth } } }, { $count: "count" }],
-          inProgressLastMonth: [{ $match: { status: { $in: ['assigned', 'accepted', 'in_progress'] }, createdAt: { $lt: lastMonth } } }, { $count: "count" }],
-          completedLastMonth: [{ $match: { status: "completed", createdAt: { $lt: lastMonth } } }, { $count: "count" }],
+    const inProgressStatuses = ['assigned', 'accepted', 'in_progress'];
 
-          // Recent Tickets List
-          recentTickets: [
-            { $sort: { createdAt: -1 } },
-            { $limit: 10 },
-            {
-              $lookup: {
-                from: "users",
-                localField: "assignedTo",
-                foreignField: "firebaseUid",
-                as: "assignedTechnician"
-              }
-            },
-            {
-              $unwind: {
-                path: "$assignedTechnician",
-                preserveNullAndEmptyArrays: true
-              }
-            },
-            {
-              $project: {
-                id: { $ifNull: ["$id", { $toString: "$_id" }] },
-                title: 1,
-                description: 1,
-                status: 1,
-                priority: 1,
-                category: 1,
-                location: 1,
-                buildingName: 1,
-                createdByName: 1,
-                assignedToName: 1,
-                assignedTechnicianPhone: "$assignedTechnician.phoneNumber",
-                createdAt: 1,
-                updatedAt: 1
-              }
-            }
-          ]
-        }
-      }
-    ]).toArray();
-
-    // Helper to extract count from facet result (which is an array like [{ count: 5 }] or [])
-    const getCount = (arr: Array<{ count: number }>) => arr.length > 0 ? arr[0].count : 0;
+    const [
+      total,
+      open,
+      inProgress,
+      completed,
+      totalLastMonth,
+      openLastMonth,
+      inProgressLastMonth,
+      completedLastMonth,
+      recentTickets,
+      trendTickets,
+    ] = await Promise.all([
+      ticketsCollection.countDocuments(filter),
+      ticketsCollection.countDocuments({ ...filter, status: 'open' }),
+      ticketsCollection.countDocuments({ ...filter, status: { $in: inProgressStatuses } }),
+      ticketsCollection.countDocuments({ ...filter, status: 'completed' }),
+      ticketsCollection.countDocuments({ ...filter, createdAt: { $lt: lastMonth } }),
+      ticketsCollection.countDocuments({ ...filter, status: 'open', createdAt: { $lt: lastMonth } }),
+      ticketsCollection.countDocuments({
+        ...filter,
+        status: { $in: inProgressStatuses },
+        createdAt: { $lt: lastMonth },
+      }),
+      ticketsCollection.countDocuments({ ...filter, status: 'completed', createdAt: { $lt: lastMonth } }),
+      ticketsCollection
+        .find(filter)
+        .sort({ createdAt: -1, _id: -1 })
+        .limit(10)
+        .project({
+          _id: 1,
+          id: 1,
+          title: 1,
+          description: 1,
+          status: 1,
+          priority: 1,
+          category: 1,
+          location: 1,
+          buildingName: 1,
+          createdByName: 1,
+          assignedToName: 1,
+          assignedTechnicianPhone: 1,
+          createdAt: 1,
+          updatedAt: 1,
+        })
+        .toArray(),
+      ticketsCollection
+        .find(filter)
+        .sort({ createdAt: -1, _id: -1 })
+        .limit(2000)
+        .project({ _id: 0, createdAt: 1, status: 1 })
+        .toArray(),
+    ]);
 
     const stats = {
-      total: getCount(result.total),
-      open: getCount(result.open),
-      inProgress: getCount(result.inProgress),
-      completed: getCount(result.completed),
-      
-      totalLastMonth: getCount(result.totalLastMonth),
-      openLastMonth: getCount(result.openLastMonth),
-      inProgressLastMonth: getCount(result.inProgressLastMonth),
-      completedLastMonth: getCount(result.completedLastMonth),
+      total,
+      open,
+      inProgress,
+      completed,
+      totalLastMonth,
+      openLastMonth,
+      inProgressLastMonth,
+      completedLastMonth,
     };
 
-    const recentTickets = result.recentTickets || [];
+    // Process last 7 days data for charts in JS to tolerate legacy date formats.
+    const dates: string[] = [];
+    const dateIndexMap: Record<string, number> = {};
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const key = date.toISOString().split('T')[0];
+      dateIndexMap[key] = dates.length;
+      dates.push(key);
+    }
 
-    console.log('📈 Stats calculated via Aggregation:', stats);
+    const totalData = new Array(7).fill(0);
+    const openData = new Array(7).fill(0);
+    const inProgressData = new Array(7).fill(0);
+    const completedData = new Array(7).fill(0);
+
+    trendTickets.forEach((ticket: Record<string, unknown>) => {
+      const rawDate = ticket.createdAt;
+      let createdAt: Date | null = null;
+
+      if (rawDate instanceof Date) {
+        createdAt = rawDate;
+      } else if (typeof rawDate === 'string' || typeof rawDate === 'number') {
+        const parsed = new Date(rawDate);
+        if (!Number.isNaN(parsed.getTime())) {
+          createdAt = parsed;
+        }
+      }
+
+      if (!createdAt || createdAt < last7Days) {
+        return;
+      }
+
+      const key = createdAt.toISOString().split('T')[0];
+      const index = dateIndexMap[key];
+      if (index === undefined) {
+        return;
+      }
+
+      const status = String(ticket.status || '');
+      totalData[index] += 1;
+      if (status === 'open') {
+        openData[index] += 1;
+      } else if (inProgressStatuses.includes(status)) {
+        inProgressData[index] += 1;
+      } else if (status === 'completed') {
+        completedData[index] += 1;
+      }
+    });
+
+    const chartData = {
+      labels: dates.map((d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
+      totalData,
+      openData,
+      inProgressData,
+      completedData,
+    };
+
+    console.log('📈 Stats calculated:', stats);
     console.log('🎫 Recent tickets found:', recentTickets.length);
 
     // Calculate percentage changes
@@ -165,23 +223,29 @@ export async function GET(request: Request) {
         stats: {
           total: {
             value: stats.total,
-            trend: calculateTrend(stats.total, stats.totalLastMonth)
+            trend: calculateTrend(stats.total, stats.totalLastMonth),
+            chartData: chartData.totalData
           },
           open: {
             value: stats.open,
-            trend: calculateTrend(stats.open, stats.openLastMonth)
+            trend: calculateTrend(stats.open, stats.openLastMonth),
+            chartData: chartData.openData
           },
           inProgress: {
             value: stats.inProgress,
-            trend: calculateTrend(stats.inProgress, stats.inProgressLastMonth)
+            trend: calculateTrend(stats.inProgress, stats.inProgressLastMonth),
+            chartData: chartData.inProgressData
           },
           completed: {
             value: stats.completed,
-            trend: calculateTrend(stats.completed, stats.completedLastMonth)
+            trend: calculateTrend(stats.completed, stats.completedLastMonth),
+            chartData: chartData.completedData
           }
         },
+        chartLabels: chartData.labels,
         recentTickets: recentTickets.map((ticket: Record<string, unknown>) => ({
           ...ticket,
+          id: ticket.id || String(ticket._id || ''),
           // Ensure dates are Date objects or strings as expected by frontend
           created_at: ticket.createdAt,
           updated_at: ticket.updatedAt,
@@ -199,14 +263,26 @@ export async function GET(request: Request) {
     
     return NextResponse.json(responseData);
   } catch (error) {
-    console.error('Dashboard stats error:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    const isConnectionError = message.includes('ECONNREFUSED') ||
+      message.includes('ENOTFOUND') ||
+      message.includes('querySrv') ||
+      message.includes('connect') ||
+      message.includes('topology') ||
+      message.includes('ServerSelectionTimeout');
+
+    console.error('Dashboard stats error:', message);
+
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to fetch dashboard statistics',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: isConnectionError
+          ? 'Database connection failed. The MongoDB cluster may be paused or unreachable.'
+          : 'Failed to fetch dashboard statistics',
+        details: message,
+        connectionError: isConnectionError,
       },
-      { status: 500 }
+      { status: isConnectionError ? 503 : 500 }
     );
   }
 }

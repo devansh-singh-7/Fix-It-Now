@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     const usersCollection = db.collection('users');
 
     const user = await usersCollection.findOne(
-      { firebaseUid: uid },
+      { $or: [{ firebaseUid: uid }, { uid }] },
       { projection: { _id: 0, uid: 0 } } // Exclude MongoDB _id from response
     );
 
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
       success: true,
       data: {
         ...user,
-        uid: user.firebaseUid
+        uid: user.firebaseUid || user.uid
       } 
     });
 

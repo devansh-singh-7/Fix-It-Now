@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { requireAdminOrOwner } from '@/app/lib/server-auth';
+import { requireAdminOwnerOrTechnician } from '@/app/lib/server-auth';
 
 /**
  * GET /api/predictions/model
@@ -10,7 +10,7 @@ import { requireAdminOrOwner } from '@/app/lib/server-auth';
  */
 export async function GET(request: Request) {
   try {
-    const authResult = await requireAdminOrOwner(request);
+    const authResult = await requireAdminOwnerOrTechnician(request);
     if (!authResult.ok) {
       return authResult.response;
     }

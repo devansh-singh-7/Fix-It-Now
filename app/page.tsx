@@ -1,24 +1,22 @@
 'use client';
 
-import React, { Suspense } from 'react';
+import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { motion, useReducedMotion } from 'framer-motion';
+import {
+  Bell,
+  BarChart3,
+  Smartphone,
+  Target,
+  Wrench,
+  Sparkles,
+  ShieldCheck,
+  Clock3,
+  Zap,
+} from 'lucide-react';
 import { GradientText } from '@/components/ui/gradient-text';
-import { fixitupPlans } from '@/components/ui/pricing';
-
-// Lazy load heavy components to improve initial load
-const Pricing = dynamic(
-  () => import('@/components/ui/pricing').then((mod) => ({ default: mod.Pricing })),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="w-full h-96 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    ),
-  }
-);
 
 // Lazy load Spline 3D scene to improve initial load time
 const SplineSceneBasic = dynamic(
@@ -126,7 +124,6 @@ const LandingPage: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const [userRole, setUserRole] = React.useState<'admin' | 'technician' | 'resident' | null>(null);
   const [mounted, setMounted] = React.useState(false);
-  const [isReady, setIsReady] = React.useState(false);
 
   React.useEffect(() => {
     setMounted(true);
@@ -148,7 +145,6 @@ const LandingPage: React.FC = () => {
         setIsAuthenticated(false);
         setUserRole(null);
       }
-      setIsReady(true);
     });
   }, []);
 
@@ -183,7 +179,7 @@ const LandingPage: React.FC = () => {
                 opacity: [0.03, 0.06, 0.03],
               }}
               transition={{ duration: 25, repeat: Infinity, ease: 'linear' }}
-              className="absolute top-1/4 right-1/4 w-64 h-64 border border-blue-200/30 dark:border-blue-800/20 rounded-full blur-3xl"
+              className="hidden lg:block absolute top-1/4 right-1/4 w-64 h-64 border border-blue-200/30 dark:border-blue-800/20 rounded-full blur-xl"
             />
             <motion.div
               aria-hidden
@@ -198,7 +194,7 @@ const LandingPage: React.FC = () => {
                 ease: 'linear',
                 delay: 5,
               }}
-              className="absolute bottom-1/3 left-1/4 w-48 h-48 border border-purple-200/30 dark:border-purple-800/20 rounded-lg rotate-45 blur-2xl"
+              className="hidden lg:block absolute bottom-1/3 left-1/4 w-48 h-48 border border-purple-200/30 dark:border-purple-800/20 rounded-lg rotate-45 blur-xl"
             />
           </>
         )}
@@ -210,9 +206,11 @@ const LandingPage: React.FC = () => {
           <div className="flex items-center justify-between">
             <Link href="/" className="flex items-center gap-3 group" aria-label="FixItNow home">
               <div className="relative w-10 h-10">
-                <img
+                <Image
                   src="/fixitnow-icon.png"
                   alt="FixItNow Logo"
+                  width={40}
+                  height={40}
                   className="w-10 h-10 object-contain"
                 />
               </div>
@@ -285,12 +283,29 @@ const LandingPage: React.FC = () => {
           transition={{ duration: reduce ? 0 : 0.6, ease: [0.43, 0.13, 0.23, 0.96] }}
           className="text-center max-w-5xl mx-auto"
         >
+          <motion.div
+            initial={reduce ? { opacity: 1 } : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: reduce ? 0 : 0.4 }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-blue-200/70 dark:border-blue-800/60 bg-white/80 dark:bg-gray-900/80 shadow-sm backdrop-blur-sm mb-6"
+          >
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
+            <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 tracking-wide">
+              Live platform
+            </span>
+          </motion.div>
+
           {/* Main headline */}
           <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 leading-tight tracking-tight">
             <span className="text-gray-900 dark:text-white">Enterprise </span>
             <GradientText>Maintenance</GradientText>
             <span className="text-gray-900 dark:text-white"> Management</span>
           </h1>
+
+          <p className="text-lg md:text-xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto mb-10 leading-relaxed">
+            Run requests, dispatch, and preventive operations from one command center built for
+            modern property teams.
+          </p>
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
@@ -350,7 +365,43 @@ const LandingPage: React.FC = () => {
             </motion.div>
           </div>
 
-          {/* Stats */}
+          <motion.div
+            initial={reduce ? { opacity: 1 } : { opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: reduce ? 0 : 0.45, delay: reduce ? 0 : 0.15 }}
+            className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-3"
+          >
+            {[
+              {
+                label: 'Avg response time',
+                value: '18 min',
+                icon: <Clock3 className="w-4 h-4" />,
+              },
+              {
+                label: 'System reliability',
+                value: '99.97%',
+                icon: <ShieldCheck className="w-4 h-4" />,
+              },
+              {
+                label: 'Faster resolutions',
+                value: '2.4x',
+                icon: <Zap className="w-4 h-4" />,
+              },
+            ].map((stat) => (
+              <div
+                key={stat.label}
+                className="rounded-2xl border border-gray-200/80 dark:border-gray-800/80 bg-white/80 dark:bg-gray-900/70 backdrop-blur-sm px-5 py-4 text-left shadow-sm"
+              >
+                <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 mb-2">
+                  {stat.icon}
+                  <span className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    {stat.label}
+                  </span>
+                </div>
+                <p className="text-xl font-bold text-gray-900 dark:text-white">{stat.value}</p>
+              </div>
+            ))}
+          </motion.div>
         </motion.section>
 
         {/* Features Grid */}
@@ -362,6 +413,9 @@ const LandingPage: React.FC = () => {
           className="mt-16 md:mt-32"
         >
           <div className="text-center mb-16">
+            <p className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide uppercase text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 border border-blue-200/70 dark:border-blue-900/60 mb-5">
+              Platform Capabilities
+            </p>
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4">
               Comprehensive Maintenance Platform
             </h2>
@@ -373,42 +427,42 @@ const LandingPage: React.FC = () => {
           {/* FIX: Added items-stretch to grid to ensure equal height cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
             <FeatureCard
-              icon="📱"
+              icon={<Smartphone className="w-7 h-7" strokeWidth={1.8} />}
               title="Mobile-First Reporting"
               description="Submit maintenance requests instantly from any device with photos, location, and detailed descriptions. Works offline and syncs automatically."
               delay={0}
               priority="high"
             />
             <FeatureCard
-              icon="🎯"
+              icon={<Target className="w-7 h-7" strokeWidth={1.8} />}
               title="Smart Assignment"
               description="AI-powered routing assigns tickets to the right technician based on skills, availability, location, and workload for faster resolution."
               delay={0.1}
               priority="high"
             />
             <FeatureCard
-              icon="📊"
+              icon={<BarChart3 className="w-7 h-7" strokeWidth={1.8} />}
               title="Real-Time Analytics"
               description="Track KPIs, response times, completion rates, and costs with comprehensive dashboards."
               delay={0.2}
               priority="medium"
             />
             <FeatureCard
-              icon="🔔"
+              icon={<Bell className="w-7 h-7" strokeWidth={1.8} />}
               title="Instant Notifications"
               description="Get real-time updates via email, SMS, and push notifications for ticket status changes, assignments, and escalations."
               delay={0}
               priority="medium"
             />
             <FeatureCard
-              icon="🔧"
+              icon={<Wrench className="w-7 h-7" strokeWidth={1.8} />}
               title="Technician Tools"
               description="Equip your team with mobile apps, work order management, inventory tracking, and time tracking."
               delay={0.1}
               priority="medium"
             />
             <FeatureCard
-              icon="🔮"
+              icon={<Sparkles className="w-7 h-7" strokeWidth={1.8} />}
               title="Predictive Maintenance"
               description="Prevent costly breakdowns with AI-driven predictions, automated scheduling, and preventive maintenance workflows."
               delay={0.2}
@@ -619,108 +673,6 @@ const LandingPage: React.FC = () => {
           </div>
         </motion.section>
 
-        {/* Pricing Section */}
-        <motion.section
-          id="pricing"
-          initial={{ opacity: 0, y: 40 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: reduce ? 0 : 0.6 }}
-          className="mt-20 md:mt-32"
-        >
-          <Pricing
-            plans={fixitupPlans}
-            title="Choose Your Plan"
-            description="Get started with FixItUp and transform your building maintenance.\nPay once, manage all your buildings, technicians, and services."
-          />
-        </motion.section>
-
-        {/* CTA Section */}
-        <motion.section
-          initial={{ opacity: 0, y: 40 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: reduce ? 0 : 0.6 }}
-          className="mt-20 md:mt-32 text-center"
-        >
-          <div className="relative overflow-hidden rounded-3xl bg-linear-to-r from-gray-900 to-gray-800 dark:from-gray-900 dark:to-black p-8 md:p-12 text-white shadow-2xl">
-            {/* Background pattern */}
-            <div className="absolute inset-0 opacity-5">
-              <div
-                className="absolute inset-0"
-                style={{
-                  backgroundImage: `radial-gradient(circle at 25px 25px, rgba(255,255,255,0.2) 2px, transparent 0)`,
-                  backgroundSize: '50px 50px',
-                }}
-              />
-            </div>
-
-            <h2 className="text-3xl md:text-4xl font-bold mb-6 relative z-10">
-              Ready to Transform Your Operations?
-            </h2>
-            <p className="text-xl opacity-90 mb-8 max-w-2xl mx-auto relative z-10">
-              Join thousands of teams already optimizing their maintenance workflow with FixItNow
-            </p>
-
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center relative z-10">
-              <motion.div
-                whileHover={!reduce ? { scale: 1.02 } : {}}
-                whileTap={!reduce ? { scale: 0.98 } : {}}
-                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-              >
-                <Link
-                  href="/auth/signup"
-                  className="inline-flex items-center gap-3 px-8 py-4 bg-white text-gray-900 rounded-xl font-semibold hover:shadow-xl transition-all duration-300"
-                >
-                  Start Free Trial
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M13 7l5 5m0 0l-5 5m5-5H6"
-                    />
-                  </svg>
-                </Link>
-              </motion.div>
-
-              <Link
-                href="/contact"
-                className="text-white opacity-80 hover:opacity-100 font-medium transition-opacity px-4 py-2"
-              >
-                Contact Sales →
-              </Link>
-            </div>
-
-            <p className="mt-8 text-sm opacity-75 relative z-10">
-              No credit card required • 14-day free trial • Enterprise-grade security
-            </p>
-          </div>
-        </motion.section>
-
-        {/* Trusted By */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          className="mt-24"
-        >
-          <p className="text-center text-sm text-gray-500 dark:text-gray-500 mb-8 font-medium tracking-wide uppercase">
-            Trusted by industry leaders
-          </p>
-          <div className="flex flex-wrap justify-center gap-8 md:gap-16 items-center opacity-60 grayscale hover:grayscale-0 transition-all duration-500">
-            {['PropertyCo', 'FacilityMax', 'BuildingPro', 'MaintenanceHub', 'TechServices'].map(
-              (company, index) => (
-                <div
-                  key={index}
-                  className="text-gray-800 dark:text-gray-200 text-lg font-bold hover:scale-105 transition-transform cursor-default"
-                >
-                  {company}
-                </div>
-              )
-            )}
-          </div>
-        </motion.div>
       </main>
 
       {/* Footer */}
@@ -729,9 +681,11 @@ const LandingPage: React.FC = () => {
           <div className="flex flex-col md:flex-row justify-between items-center gap-8">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9">
-                <img
+                <Image
                   src="/fixitnow-icon.png"
                   alt="FixItNow Logo"
+                  width={36}
+                  height={36}
                   className="w-9 h-9 object-contain"
                 />
               </div>

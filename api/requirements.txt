@@ -14,6 +14,11 @@ numpy>=1.24.0
 
 # Training utilities
 tqdm>=4.65.0
+pymongo>=4.6.0
+scikit-learn>=1.4.0
+pandas>=2.2.0
+joblib>=1.3.0
+apscheduler>=3.10.0
 
 # Optional: for scikit-learn model loading (if using pickle)
 # scikit-learn>=1.4.0

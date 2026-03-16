@@ -84,7 +84,7 @@ export default function JoinBuildingBanner({ onJoinSuccess }: JoinBuildingBanner
       // Dispatch custom event to notify NavBar (storage events don't fire in same tab)
       window.dispatchEvent(new CustomEvent('userProfileUpdated'));
       
-      console.log('✅ Building joined successfully:', {
+      console.log('Building joined successfully:', {
         buildingId: validateData.data.id,
         buildingName: validateData.data.name
       });

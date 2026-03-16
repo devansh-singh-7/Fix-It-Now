@@ -2,6 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/app/lib/mongodb';
 import { getBuilding, getTechniciansForBuilding } from '@/app/lib/database';
 
+async function canManageBuilding(db: Awaited<ReturnType<typeof getDatabase>>, uid: string, buildingAdminId?: string): Promise<boolean> {
+    const actor = await db.collection('users').findOne(
+        { firebaseUid: uid },
+        { projection: { role: 1 } }
+    );
+
+    // Platform admins can manage any building.
+    if (actor?.role === 'admin') {
+        return true;
+    }
+
+    // Building owner (or creator on legacy records) can manage their own building.
+    return !!buildingAdminId && buildingAdminId === uid;
+}
+
 /**
  * GET /api/buildings/[id]/technicians
  * Get all technicians for a building
@@ -73,7 +88,7 @@ export async function POST(
             );
         }
 
-        // Verify building exists and admin owns it
+        // Verify building exists and actor can manage it
         const building = await getBuilding(id);
         if (!building) {
             return NextResponse.json(
@@ -82,7 +97,9 @@ export async function POST(
             );
         }
 
-        if (building.adminId !== adminUid) {
+        const db = await getDatabase();
+        const hasAccess = await canManageBuilding(db, adminUid, building.adminId);
+        if (!hasAccess) {
             return NextResponse.json(
                 { success: false, error: 'Not authorized to manage this building' },
                 { status: 403 }
@@ -90,7 +107,6 @@ export async function POST(
         }
 
         const { technicianUid, name, email, phoneNumber } = body;
-        const db = await getDatabase();
 
         if (technicianUid) {
             // Assign existing user as technician to this building
@@ -209,7 +225,7 @@ export async function DELETE(
             );
         }
 
-        // Verify building exists and admin owns it
+        // Verify building exists and actor can manage it
         const building = await getBuilding(id);
         if (!building) {
             return NextResponse.json(
@@ -218,14 +234,14 @@ export async function DELETE(
             );
         }
 
-        if (building.adminId !== adminUid) {
+        const db = await getDatabase();
+        const hasAccess = await canManageBuilding(db, adminUid, building.adminId);
+        if (!hasAccess) {
             return NextResponse.json(
                 { success: false, error: 'Not authorized to manage this building' },
                 { status: 403 }
             );
         }
-
-        const db = await getDatabase();
 
         // Remove technician from building (set to resident, clear building)
         await db.collection('users').updateOne(

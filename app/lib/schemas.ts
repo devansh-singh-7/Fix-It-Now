@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
 
 // Zod schema for ticket creation
 export const createTicketSchema = z.object({
@@ -23,7 +24,18 @@ export const createTicketSchema = z.object({
   }),
   status: z.enum(['open', 'assigned', 'accepted', 'in_progress', 'completed']).optional(),
   location: z.string().min(1, "Location is required").max(200),
-  contactPhone: z.string().optional(),
+  contactPhone: z
+    .string()
+    .min(1, 'Contact phone is required')
+    .refine((value) => value.startsWith('+'), {
+      message: 'Contact phone must include country extension (e.g. +91, +1)',
+    })
+    .refine((value) => {
+      const parsed = parsePhoneNumberFromString(value);
+      return !!parsed && parsed.isValid();
+    }, {
+      message: 'Contact phone number length/format is invalid for the selected country',
+    }),
   imageUrls: z.array(z.string().url("Invalid image URL")).optional().default([]),
   imagePublicIds: z.array(z.string()).optional().default([]),
   createdByName: z.string().min(1, "Creator name is required"),
@@ -42,6 +54,10 @@ export const maintenanceTypeSchema = z.enum([
 ]);
 
 export const createMaintenanceLogSchema = z.object({
+  assetName: z.string().min(1, 'Asset name is required').max(120).optional(),
+  assetType: z
+    .enum(['hvac', 'electrical', 'plumbing', 'elevator', 'security', 'appliance'])
+    .optional(),
   maintenanceType: maintenanceTypeSchema,
   actionTaken: z.string().min(1, 'Action taken is required').max(200),
   dateCompleted: z.coerce.date(),

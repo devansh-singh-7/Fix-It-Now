@@ -98,12 +98,30 @@ export async function storeAuthToken(user: User): Promise<void> {
     // Also fetch and store user profile
     const profile = await getCurrentUserProfile(user.uid);
     if (profile) {
+      let existingProfile: Record<string, unknown> = {};
+      const existingProfileRaw = localStorage.getItem('userProfile');
+      if (existingProfileRaw) {
+        try {
+          existingProfile = JSON.parse(existingProfileRaw);
+        } catch {
+          existingProfile = {};
+        }
+      }
+
       localStorage.setItem('userProfile', JSON.stringify({
+        ...existingProfile,
         displayName: profile.name,
+        name: profile.name,
         email: profile.email,
         role: profile.role,
+        uid: profile.uid,
         firebaseUid: profile.uid,
+        buildingId: profile.buildingId ?? existingProfile.buildingId,
+        buildingName: profile.buildingName ?? existingProfile.buildingName,
       }));
+
+      // Notify listeners in the same tab that profile fields (like building assignment) changed.
+      window.dispatchEvent(new CustomEvent('userProfileUpdated'));
     }
   } catch (error) {
     console.error('Error storing auth token:', error);

@@ -98,6 +98,22 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+
+  // Turbopack configuration (empty to silence migration warning)
+  turbopack: {},
+
+  // Webpack configuration to suppress source map warnings from dependencies
+  webpack: (config, { dev }) => {
+    if (dev) {
+      // Suppress source map warnings in development
+      config.ignoreWarnings = [
+        /Failed to parse source map/,
+        /Invalid source map/,
+        /sourceMapURL could not be parsed/,
+      ];
+    }
+    return config;
+  },
 };
 
 export default nextConfig;

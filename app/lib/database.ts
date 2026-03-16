@@ -1,5 +1,5 @@
 import { getDatabase, getMongoClient, COLLECTIONS } from './mongodb';
-import { Filter, UpdateFilter, Document, ClientSession } from 'mongodb';
+import { Filter, UpdateFilter, Document, ClientSession, ObjectId } from 'mongodb';
 
 export type {
   UserRole,
@@ -29,6 +29,16 @@ import type {
   InvoiceStatus,
   Prediction,
 } from './types';
+
+function buildTicketIdentifierFilter(ticketId: string): Filter<Document> {
+  const filters: Filter<Document>[] = [{ id: ticketId }];
+
+  if (ObjectId.isValid(ticketId)) {
+    filters.push({ _id: new ObjectId(ticketId) });
+  }
+
+  return filters.length === 1 ? filters[0] : { $or: filters };
+}
 
 // Super Admin configuration
 const SUPER_ADMIN_EMAILS = [
@@ -179,7 +189,7 @@ export async function getUserRole(uid: string): Promise<UserRole | null> {
     const db = await getDatabase();
     const user = await db
       .collection('users')
-      .findOne({ firebaseUid: uid }, { projection: { role: 1 } });
+      .findOne({ $or: [{ firebaseUid: uid }, { uid }] }, { projection: { role: 1 } });
 
     return user?.role || null;
   } catch (error) {
@@ -196,9 +206,12 @@ export async function getUserBuildingId(uid: string): Promise<string | null> {
     const db = await getDatabase();
     const user = await db
       .collection('users')
-      .findOne({ firebaseUid: uid }, { projection: { buildingId: 1 } });
+      .findOne(
+        { $or: [{ firebaseUid: uid }, { uid }] },
+        { projection: { buildingId: 1, building_id: 1 } }
+      );
 
-    return user?.buildingId || null;
+    return user?.buildingId || user?.building_id || null;
   } catch (error) {
     console.error('Error fetching user building ID:', error);
     return null;
@@ -225,8 +238,6 @@ export async function getUserByEmail(email: string): Promise<UserProfile | null>
       buildingName: user.buildingName,
       awaitApproval: user.awaitApproval || false,
       isActive: user.isActive ?? true,
-      subscriptionPlan: user.subscriptionPlan,
-      subscriptionTier: user.subscriptionTier,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     } as UserProfile;
@@ -251,9 +262,10 @@ export async function updateUserBuilding(
     console.log('[updateUserBuilding] Updating user building:', { uid, buildingId, buildingName });
 
     const result = await db.collection('users').updateOne(
-      { firebaseUid: uid },
+      { $or: [{ firebaseUid: uid }, { uid }] },
       {
         $set: {
+          firebaseUid: uid,
           buildingId,
           buildingName,
           updatedAt: now,
@@ -268,7 +280,7 @@ export async function updateUserBuilding(
     });
 
     if (result.matchedCount === 0) {
-      console.warn('[updateUserBuilding] No user found with firebaseUid:', uid);
+      console.warn('[updateUserBuilding] No user found with firebaseUid/uid:', uid);
     }
 
     return { matchedCount: result.matchedCount, modifiedCount: result.modifiedCount };
@@ -278,47 +290,7 @@ export async function updateUserBuilding(
   }
 }
 
-/**
- * Update user's subscription information
- * @param uid - Firebase UID
- * @param plan - Subscription plan (BASIC, PRO, ENTERPRISE)
- * @param tier - Subscription tier (1=Enterprise, 2=Pro, 3=Basic)
- * @param isYearly - Whether it's a yearly subscription
- */
-export async function updateUserSubscription(
-  uid: string,
-  plan: 'BASIC' | 'PRO' | 'ENTERPRISE',
-  tier: 1 | 2 | 3,
-  isYearly: boolean
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const db = await getDatabase();
-    const now = new Date();
 
-    const result = await db.collection('users').updateOne(
-      { firebaseUid: uid },
-      {
-        $set: {
-          subscriptionPlan: plan,
-          subscriptionTier: tier,
-          subscriptionBillingCycle: isYearly ? 'yearly' : 'monthly',
-          subscriptionStartDate: now,
-          updatedAt: now,
-        },
-      }
-    );
-
-    if (result.matchedCount === 0) {
-      return { success: false, error: 'User not found' };
-    }
-
-    console.log(`Updated subscription for user ${uid}: ${plan} (Tier ${tier})`);
-    return { success: true };
-  } catch (error) {
-    console.error('Error updating user subscription:', error);
-    return { success: false, error: 'Failed to update subscription' };
-  }
-}
 
 /**
  * Generate a random join code in format ABC-123-XYZ
@@ -346,8 +318,39 @@ function generateJoinCode(): string {
 }
 
 /**
+ * Create a new building record and keep user assignment consistent without transactions.
+ */
+async function createBuildingWithoutTransaction(
+  db: Awaited<ReturnType<typeof getDatabase>>,
+  building: Building,
+  creatorAdminUid: string,
+  buildingAdminUid: string,
+  userUpdateFields: {
+    buildingId: string;
+    buildingName: string;
+    updatedAt: Date;
+    role?: UserRole;
+  }
+): Promise<void> {
+  await db.collection('buildings').insertOne({
+    ...building,
+    createdByAdminId: creatorAdminUid,
+  });
+
+  const userUpdateResult = await db.collection('users').updateOne(
+    { firebaseUid: buildingAdminUid },
+    { $set: userUpdateFields }
+  );
+
+  if (userUpdateResult.matchedCount === 0) {
+    await db.collection('buildings').deleteOne({ id: building.id });
+    throw new Error('Building owner user not found while assigning building');
+  }
+}
+
+/**
  * Create a new building (admin only)
- * Uses a transaction to ensure atomicity
+ * Uses a best-effort rollback strategy to support standalone MongoDB servers.
  */
 export async function createBuilding(
   adminUid: string,
@@ -359,13 +362,8 @@ export async function createBuilding(
     ownerEmail?: string; // Optional: email of registered user to assign as owner
   }
 ): Promise<Building> {
-  let session: ClientSession | undefined;
   try {
     const db = await getDatabase();
-    const client = await getMongoClient();
-
-    // Start session for transaction
-    session = client.startSession();
 
     // Verify user is admin
     const role = await getUserRole(adminUid);
@@ -391,8 +389,6 @@ export async function createBuilding(
     // Generate unique join code
     let joinCode = generateJoinCode();
     let isUnique = false;
-
-    // Join code generation doesn't need to be in the transaction as it's just querying
     while (!isUnique) {
       const existing = await db.collection('buildings').findOne({ joinCode });
       if (!existing) {
@@ -410,49 +406,39 @@ export async function createBuilding(
       state: buildingData.state,
       area: buildingData.area,
       joinCode,
-      adminId: buildingAdminUid, // Use resolved admin UID (could be different from creator)
+      adminId: buildingAdminUid,
       isActive: true,
       createdAt: now,
       updatedAt: now,
     };
 
-    // Execute transaction
-    await session.withTransaction(async () => {
-      // 1. Create building
-      await db.collection('buildings').insertOne(building, { session });
+    const userUpdateFields: {
+      buildingId: string;
+      buildingName: string;
+      updatedAt: Date;
+      role?: UserRole;
+    } = {
+      buildingId: building.id,
+      buildingName: building.name,
+      updatedAt: now,
+    };
 
-      // 2. Update building owner's user document with building ID and role if needed
-      const userUpdateFields: {
-        buildingId: string;
-        buildingName: string;
-        updatedAt: Date;
-        role?: UserRole;
-      } = {
-        buildingId: building.id,
-        buildingName: building.name,
-        updatedAt: now,
-      };
-      
-      // Upgrade to owner role if the user is a resident or technician
-      if (shouldUpgradeToOwner) {
-        userUpdateFields.role = 'owner';
-      }
-      
-      await db.collection('users').updateOne(
-        { firebaseUid: buildingAdminUid },
-        { $set: userUpdateFields },
-        { session }
-      );
-    });
+    if (shouldUpgradeToOwner) {
+      userUpdateFields.role = 'owner';
+    }
+
+    await createBuildingWithoutTransaction(
+      db,
+      building,
+      adminUid,
+      buildingAdminUid,
+      userUpdateFields
+    );
 
     return building;
   } catch (error) {
     console.error('Error creating building:', error);
     throw error;
-  } finally {
-    if (session) {
-      await session.endSession();
-    }
   }
 }
 
@@ -620,9 +606,10 @@ export async function updateTicketStatus(
   try {
     const db = await getDatabase();
     const now = new Date();
+    const ticketFilter = buildTicketIdentifierFilter(ticketId);
 
     // Get current ticket
-    const currentTicket = await db.collection('tickets').findOne({ id: ticketId });
+    const currentTicket = await db.collection('tickets').findOne(ticketFilter);
 
     const updateData: UpdateFilter<Document> = {
       $set: {
@@ -650,7 +637,11 @@ export async function updateTicketStatus(
     const currentTimeline = currentTicket?.timeline || [];
     updateData.$set!.timeline = [...currentTimeline, timelineEvent];
 
-    await db.collection('tickets').updateOne({ id: ticketId }, updateData);
+    const updateResult = await db.collection('tickets').updateOne(ticketFilter, updateData);
+
+    if (updateResult.matchedCount === 0) {
+      throw new Error('Ticket not found for status update');
+    }
   } catch (error) {
     console.error('Error updating ticket status:', error);
     throw error;
@@ -670,9 +661,10 @@ export async function assignTicket(
   try {
     const db = await getDatabase();
     const now = new Date();
+    const ticketFilter = buildTicketIdentifierFilter(ticketId);
 
     // Get current ticket
-    const currentTicket = await db.collection('tickets').findOne({ id: ticketId });
+    const currentTicket = await db.collection('tickets').findOne(ticketFilter);
 
     const timelineEvent: TimelineEvent = {
       status: 'assigned',
@@ -684,20 +676,21 @@ export async function assignTicket(
 
     const currentTimeline = currentTicket?.timeline || [];
 
-    await db.collection('tickets').updateOne(
-      { id: ticketId },
-      {
-        $set: {
-          assignedTo: technicianUid,
-          assignedToName: technicianName,
-          assignedTechnicianId: technicianUid,
-          assignedAt: now,
-          status: 'assigned',
-          timeline: [...currentTimeline, timelineEvent],
-          updatedAt: now,
-        },
-      }
-    );
+    const updateResult = await db.collection('tickets').updateOne(ticketFilter, {
+      $set: {
+        assignedTo: technicianUid,
+        assignedToName: technicianName,
+        assignedTechnicianId: technicianUid,
+        assignedAt: now,
+        status: 'assigned',
+        timeline: [...currentTimeline, timelineEvent],
+        updatedAt: now,
+      },
+    });
+
+    if (updateResult.matchedCount === 0) {
+      throw new Error('Ticket not found for assignment');
+    }
 
     // Create notifications for relevant parties
     if (currentTicket) {
@@ -769,11 +762,35 @@ export async function getTechniciansForBuilding(buildingId: string): Promise<Use
 export async function getBuildingsForAdmin(adminUid: string): Promise<Building[]> {
   try {
     const db = await getDatabase();
-    const buildings = await db
+
+    // Primary query: buildings owned by this user.
+    let buildings = await db
       .collection('buildings')
-      .find({ adminId: adminUid })
+      .find({
+        $or: [
+          { adminId: adminUid },
+          { createdByAdminId: adminUid },
+        ],
+      })
       .sort({ createdAt: -1 })
       .toArray();
+
+    // Compatibility fallback for older/inconsistent records:
+    // if the current user is an admin but no records matched, show active buildings
+    // so the management page is not blank.
+    if (buildings.length === 0) {
+      const currentUser = await db
+        .collection('users')
+        .findOne({ firebaseUid: adminUid }, { projection: { role: 1 } });
+
+      if (currentUser?.role === 'admin') {
+        buildings = await db
+          .collection('buildings')
+          .find({ isActive: { $ne: false } })
+          .sort({ createdAt: -1 })
+          .toArray();
+      }
+    }
 
     return buildings as unknown as Building[];
   } catch (error) {
@@ -885,6 +902,137 @@ export async function deleteBuilding(
   }
 }
 
+/**
+ * Change building owner by email
+ * Only the current admin can change the owner
+ * 
+ * @param buildingId - Building ID
+ * @param currentAdminUid - Current admin/owner UID
+ * @param newOwnerEmail - Email of the new owner
+ * @returns Success status with optional error message
+ */
+export async function changeBuildingOwner(
+  buildingId: string,
+  currentAdminUid: string,
+  newOwnerEmail: string
+): Promise<{ success: boolean; error?: string; newOwner?: UserProfile }> {
+  let session: ClientSession | undefined;
+  try {
+    const db = await getDatabase();
+    const client = await getMongoClient();
+
+    // Validate inputs
+    if (!newOwnerEmail || !newOwnerEmail.trim()) {
+      return { success: false, error: 'New owner email is required' };
+    }
+
+    // Get the building
+    let building = await db.collection('buildings').findOne({ id: buildingId });
+    let filter: Record<string, unknown> = { id: buildingId };
+
+    if (!building) {
+      try {
+        const { ObjectId } = await import('mongodb');
+        if (ObjectId.isValid(buildingId)) {
+          building = await db.collection('buildings').findOne({ _id: new ObjectId(buildingId) });
+          if (building) {
+            filter = { _id: new ObjectId(buildingId) };
+          }
+        }
+      } catch {
+        // ObjectId parsing failed, ignore
+      }
+    }
+
+    if (!building) {
+      return { success: false, error: 'Building not found' };
+    }
+
+    // Verify current user is the building admin
+    if (building.adminId !== currentAdminUid) {
+      return { success: false, error: 'Only the building owner can change ownership' };
+    }
+
+    // Look up the new owner by email
+    const newOwner = await getUserByEmail(newOwnerEmail);
+    if (!newOwner) {
+      return { success: false, error: `No registered user found with email: ${newOwnerEmail}` };
+    }
+
+    // Check if the new owner is the same as current owner
+    if (newOwner.uid === currentAdminUid) {
+      return { success: false, error: 'This user is already the building owner' };
+    }
+
+    // Start transaction
+    session = client.startSession();
+    const now = new Date();
+
+    await session.withTransaction(async () => {
+      // 1. Update building's adminId
+      await db.collection('buildings').updateOne(
+        filter,
+        { $set: { adminId: newOwner.uid, updatedAt: now } },
+        { session }
+      );
+
+      // 2. Update new owner's user document
+      const newOwnerUpdateFields: {
+        buildingId: string;
+        buildingName: string;
+        role?: UserRole;
+        updatedAt: Date;
+      } = {
+        buildingId: building.id,
+        buildingName: building.name,
+        updatedAt: now,
+      };
+
+      // Upgrade to owner role if not already admin or owner
+      if (newOwner.role !== 'admin' && newOwner.role !== 'owner') {
+        newOwnerUpdateFields.role = 'owner';
+      }
+
+      await db.collection('users').updateOne(
+        { firebaseUid: newOwner.uid },
+        { $set: newOwnerUpdateFields },
+        { session }
+      );
+
+      // 3. Optionally handle the old owner
+      // Get current admin's role to decide whether to downgrade
+      const currentAdmin = await db.collection('users').findOne({ firebaseUid: currentAdminUid });
+      
+      if (currentAdmin && currentAdmin.role === 'owner') {
+        // If current admin is only an owner (not super admin), we can optionally downgrade them
+        // For now, we'll just remove their building association but keep their owner role
+        // in case they own other buildings or want to create new ones
+        await db.collection('users').updateOne(
+          { firebaseUid: currentAdminUid },
+          { 
+            $set: { 
+              buildingId: null,
+              buildingName: null,
+              updatedAt: now 
+            } 
+          },
+          { session }
+        );
+      }
+    });
+
+    await session.endSession();
+
+    return { success: true, newOwner };
+  } catch (error) {
+    if (session) {
+      await session.endSession();
+    }
+    console.error('Error changing building owner:', error);
+    return { success: false, error: 'Failed to change building owner' };
+  }
+}
+
 // ==================== INVOICE OPERATIONS ====================
 
 /**
@@ -972,8 +1120,7 @@ export async function getInvoicesForBuilding(buildingId: string): Promise<Invoic
  */
 export async function updateInvoiceStatus(
   invoiceId: string,
-  status: InvoiceStatus,
-  stripeSessionId?: string
+  status: InvoiceStatus
 ): Promise<void> {
   try {
     const db = await getDatabase();
@@ -983,10 +1130,6 @@ export async function updateInvoiceStatus(
         updatedAt: new Date(),
       },
     };
-
-    if (stripeSessionId) {
-      updateData.$set!.stripeSessionId = stripeSessionId;
-    }
 
     await db.collection('invoices').updateOne({ id: invoiceId }, updateData);
   } catch (error) {
@@ -1107,7 +1250,7 @@ export async function getHighRiskPredictions(buildingId: string): Promise<Predic
 const STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
   open: ['assigned'],
   assigned: ['accepted', 'open'], // Can be unassigned back to open
-  accepted: ['in_progress', 'assigned'], // Can decline back to assigned
+  accepted: ['in_progress', 'completed', 'assigned'], // Can finish directly or decline
   in_progress: ['completed', 'accepted'], // Can pause back to accepted
   completed: ['open'], // Can reopen if needed
 };
@@ -1144,8 +1287,8 @@ export function canRolePerformTransition(
     return false;
   }
 
-  // Admin can perform any valid transition
-  if (role === 'admin') {
+  // Admin/owner can perform any valid transition
+  if (role === 'admin' || role === 'owner') {
     return true;
   }
 
@@ -1154,6 +1297,7 @@ export function canRolePerformTransition(
     const allowedTransitions = [
       { from: 'assigned', to: 'accepted' },
       { from: 'accepted', to: 'in_progress' },
+      { from: 'accepted', to: 'completed' },
       { from: 'in_progress', to: 'completed' },
       { from: 'in_progress', to: 'accepted' }, // Pause
       { from: 'accepted', to: 'assigned' }, // Decline
@@ -1181,21 +1325,43 @@ export async function canUserAccessTicket(
 ): Promise<boolean> {
   try {
     const db = await getDatabase();
-    const ticket = await db.collection('tickets').findOne({ id: ticketId });
+    const ticket = await db.collection('tickets').findOne(buildTicketIdentifierFilter(ticketId));
 
     if (!ticket) return false;
 
-    // Admin can access all tickets in their building
-    if (role === 'admin') return true;
+    // Resolve legacy/current user identifier variants (firebaseUid vs uid).
+    const userRecord = await db.collection('users').findOne(
+      { $or: [{ firebaseUid: userId }, { uid: userId }] },
+      { projection: { firebaseUid: 1, uid: 1 } }
+    );
+    const userIds = new Set(
+      [userId, userRecord?.firebaseUid, userRecord?.uid]
+        .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    );
+
+    // Admin/owner can access all tickets in their building
+    if (role === 'admin' || role === 'owner') return true;
 
     // Technician can only access tickets assigned to them
     if (role === 'technician') {
-      return ticket.assignedTo === userId;
+      const assignedIds = [
+        ticket.assignedTo,
+        ticket.assignedTechnicianId,
+        ticket.assigned_to,
+      ].filter((value): value is string => typeof value === 'string' && value.length > 0);
+
+      return (
+        assignedIds.length > 0 &&
+        assignedIds.some((assignedId) => userIds.has(assignedId))
+      );
     }
 
     // Resident can only access their own tickets
     if (role === 'resident') {
-      return ticket.createdBy === userId;
+      const creatorIds = [ticket.createdBy, ticket.created_by].filter(
+        (value): value is string => typeof value === 'string' && value.length > 0
+      );
+      return creatorIds.some((creatorId) => userIds.has(creatorId));
     }
 
     return false;
@@ -1215,20 +1381,38 @@ export async function canUserModifyTicket(
 ): Promise<{ canModify: boolean; reason?: string }> {
   try {
     const db = await getDatabase();
-    const ticket = await db.collection('tickets').findOne({ id: ticketId });
+    const ticket = await db.collection('tickets').findOne(buildTicketIdentifierFilter(ticketId));
 
     if (!ticket) {
       return { canModify: false, reason: 'Ticket not found' };
     }
 
-    // Admin can modify any ticket
-    if (role === 'admin') {
+    // Resolve legacy/current user identifier variants (firebaseUid vs uid).
+    const userRecord = await db.collection('users').findOne(
+      { $or: [{ firebaseUid: userId }, { uid: userId }] },
+      { projection: { firebaseUid: 1, uid: 1 } }
+    );
+    const userIds = new Set(
+      [userId, userRecord?.firebaseUid, userRecord?.uid]
+        .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    );
+
+    // Admin/owner can modify any ticket
+    if (role === 'admin' || role === 'owner') {
       return { canModify: true };
     }
 
     // Technician can only modify tickets assigned to them
     if (role === 'technician') {
-      if (ticket.assignedTo !== userId) {
+      const assignedIds = [
+        ticket.assignedTo,
+        ticket.assignedTechnicianId,
+        ticket.assigned_to,
+      ].filter((value): value is string => typeof value === 'string' && value.length > 0);
+
+      const isAssignedToUser = assignedIds.some((assignedId) => userIds.has(assignedId));
+
+      if (!isAssignedToUser) {
         return { canModify: false, reason: 'Ticket not assigned to you' };
       }
       return { canModify: true };
@@ -1236,7 +1420,10 @@ export async function canUserModifyTicket(
 
     // Resident can only modify their own tickets
     if (role === 'resident') {
-      if (ticket.createdBy !== userId) {
+      const creatorIds = [ticket.createdBy, ticket.created_by].filter(
+        (value): value is string => typeof value === 'string' && value.length > 0
+      );
+      if (!creatorIds.some((creatorId) => userIds.has(creatorId))) {
         return { canModify: false, reason: 'Not your ticket' };
       }
       return { canModify: true };
@@ -1381,13 +1568,16 @@ export async function updateTicketStatusWithAuth(
   userId: string,
   userName: string,
   role: UserRole,
-  note?: string
+  note?: string,
+  completionImageUrls?: string[],
+  completionImagePublicIds?: string[]
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const db = await getDatabase();
+    const ticketFilter = buildTicketIdentifierFilter(ticketId);
 
     // Get current ticket
-    const currentTicket = await db.collection('tickets').findOne({ id: ticketId });
+    const currentTicket = await db.collection('tickets').findOne(ticketFilter);
 
     if (!currentTicket) {
       return { success: false, error: 'Ticket not found' };
@@ -1422,6 +1612,14 @@ export async function updateTicketStatusWithAuth(
       updateData.$set!.acceptedAt = now;
     } else if (newStatus === 'completed') {
       updateData.$set!.completedAt = now;
+
+      if (Array.isArray(completionImageUrls) && completionImageUrls.length > 0) {
+        updateData.$set!.completionImageUrls = completionImageUrls;
+      }
+
+      if (Array.isArray(completionImagePublicIds) && completionImagePublicIds.length > 0) {
+        updateData.$set!.completionImagePublicIds = completionImagePublicIds;
+      }
     }
 
     // Add timeline event
@@ -1436,7 +1634,11 @@ export async function updateTicketStatusWithAuth(
     const currentTimeline = currentTicket.timeline || [];
     updateData.$set!.timeline = [...currentTimeline, timelineEvent];
 
-    await db.collection('tickets').updateOne({ id: ticketId }, updateData);
+    const updateResult = await db.collection('tickets').updateOne(ticketFilter, updateData);
+
+    if (updateResult.matchedCount === 0) {
+      return { success: false, error: 'Ticket not found for status update' };
+    }
 
     // Create notifications for relevant parties based on status change
     const ticketTitle = currentTicket.title;

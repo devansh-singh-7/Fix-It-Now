@@ -8,6 +8,9 @@ import type { UserProfile } from '../lib/types';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ImageUpload } from './ui/image-upload';
 import { aiClassifier } from '../lib/ai-classifier';
+import PhoneInput, { isValidPhoneNumber } from 'react-phone-number-input';
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
+import 'react-phone-number-input/style.css';
 
 interface CreateTicketFormProps {
   isOpen: boolean;
@@ -29,6 +32,35 @@ export default function CreateTicketForm({ isOpen, onClose, onSuccess }: CreateT
   const [isClassifying, setIsClassifying] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(''); // Upload status message
   const [error, setError] = useState('');
+
+  const inputBaseClass =
+    'w-full px-4 py-2.5 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors';
+
+  const normalizeToE164 = (phone: string): string => {
+    const trimmed = phone.trim();
+    if (!trimmed) return '';
+
+    // Already E.164-like
+    if (trimmed.startsWith('+')) {
+      return trimmed;
+    }
+
+    // Try parsing legacy local numbers with default country.
+    const parsed = parsePhoneNumberFromString(trimmed, 'IN');
+    return parsed?.isValid() ? parsed.number : '';
+  };
+
+  const phoneInputValue = normalizeToE164(formData.contactPhone);
+
+  useEffect(() => {
+    // Auto-migrate existing non-E.164 values to E.164 while opening the modal.
+    if (!isOpen || !formData.contactPhone) return;
+
+    const normalized = normalizeToE164(formData.contactPhone);
+    if (normalized && normalized !== formData.contactPhone) {
+      setFormData((prev) => ({ ...prev, contactPhone: normalized }));
+    }
+  }, [isOpen, formData.contactPhone]);
 
   // Load user profile - reload whenever modal opens to get latest building info
   useEffect(() => {
@@ -74,6 +106,39 @@ export default function CreateTicketForm({ isOpen, onClose, onSuccess }: CreateT
     e.preventDefault();
     setLoading(true);
     setError('');
+
+    // Client-side validation
+    if (formData.title.trim().length < 3) {
+      setError('Title must be at least 3 characters long');
+      setLoading(false);
+      return;
+    }
+
+    if (formData.description.trim().length < 10) {
+      setError('Description must be at least 10 characters long');
+      setLoading(false);
+      return;
+    }
+
+    if (!formData.category) {
+      setError('Please select a category');
+      setLoading(false);
+      return;
+    }
+
+    const normalizedContactPhone = normalizeToE164(formData.contactPhone);
+
+    if (!normalizedContactPhone) {
+      setError('Contact phone is required and must include a country code');
+      setLoading(false);
+      return;
+    }
+
+    if (!isValidPhoneNumber(normalizedContactPhone)) {
+      setError('Please enter a valid phone number for the selected country');
+      setLoading(false);
+      return;
+    }
 
     // Reload user profile from localStorage to get latest building info
     const profileStr = localStorage.getItem('userProfile');
@@ -171,7 +236,7 @@ export default function CreateTicketForm({ isOpen, onClose, onSuccess }: CreateT
         priority: 'medium', // Default priority, will be updated by admin/ML model
         status: 'open',
         location: currentProfile.buildingName || 'Building Location',
-        contactPhone: formData.contactPhone,
+        contactPhone: normalizedContactPhone,
         imageUrls: uploadedImages.map((img) => img.secure_url),
         imagePublicIds: uploadedImages.map((img) => img.public_id),
         createdByName: currentProfile.name,
@@ -197,14 +262,41 @@ export default function CreateTicketForm({ isOpen, onClose, onSuccess }: CreateT
         body: JSON.stringify(ticketData),
       });
 
-      const result = await response.json();
+      const responseContentType = response.headers.get('content-type') || '';
+      let result: {
+        success?: boolean;
+        error?: string;
+        details?: Record<string, string[] | string>;
+        data?: { id?: string };
+      } = {};
+
+      if (responseContentType.includes('application/json')) {
+        result = await response.json();
+      } else {
+        const responseText = await response.text();
+        throw new Error(
+          responseText?.trim() || 'Server returned an unexpected non-JSON response'
+        );
+      }
 
       if (!result.success) {
         console.error('API error response:', JSON.stringify(result, null, 2));
-        throw new Error(result.error || (result.details ? JSON.stringify(result.details) : 'Failed to create ticket'));
+        
+        // Format validation errors for user-friendly display
+        if (result.details && typeof result.details === 'object') {
+          const errorMessages = Object.entries(result.details)
+            .map(([field, messages]) => {
+              const messageArray = Array.isArray(messages) ? messages : [messages];
+              return `${field}: ${messageArray.join(', ')}`;
+            })
+            .join('; ');
+          throw new Error(errorMessages || result.error || 'Failed to create ticket');
+        }
+        
+        throw new Error(result.error || 'Failed to create ticket');
       }
 
-      console.log('✅ Ticket created successfully:', result.data?.id);
+      console.log('Ticket created successfully:', result.data?.id);
 
       setFormData({
         title: '',
@@ -250,16 +342,20 @@ export default function CreateTicketForm({ isOpen, onClose, onSuccess }: CreateT
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-lg bg-white dark:bg-gray-900 p-6 shadow-xl transition-all">
-                <Dialog.Title className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                  Create New Ticket
-                </Dialog.Title>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-                  Please provide detailed information about the maintenance issue
-                </p>
+              <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 shadow-2xl transition-all">
+                <div className="px-6 py-5 border-b border-gray-200 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/60">
+                  <Dialog.Title className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
+                    Create New Ticket
+                  </Dialog.Title>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Please provide detailed information about the maintenance issue
+                  </p>
+                </div>
+
+                <div className="p-6">
 
                 {error && (
-                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-start gap-2">
+                  <div className="mb-5 p-3.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-red-700 dark:text-red-300 text-sm flex items-start gap-2">
                     <svg
                       className="w-5 h-5 mt-0.5 shrink-0"
                       fill="currentColor"
@@ -286,12 +382,19 @@ export default function CreateTicketForm({ isOpen, onClose, onSuccess }: CreateT
                       required
                       value={formData.title}
                       onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                      className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className={inputBaseClass}
                       placeholder="e.g., Leaking faucet in bathroom"
                       maxLength={100}
+                      minLength={3}
                     />
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      {formData.title.length}/100 characters
+                    <p className={`mt-1 text-xs ${
+                      formData.title.length < 3
+                        ? 'text-red-500 dark:text-red-400'
+                        : formData.title.length >= 3
+                        ? 'text-green-600 dark:text-green-400'
+                        : 'text-gray-500 dark:text-gray-400'
+                    }`}>
+                      {formData.title.length}/100 characters (minimum 3)
                     </p>
                   </div>
 
@@ -305,12 +408,19 @@ export default function CreateTicketForm({ isOpen, onClose, onSuccess }: CreateT
                       value={formData.description}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                       rows={4}
-                      className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      className={`${inputBaseClass} resize-none`}
                       placeholder="Provide detailed information about the issue, including when it started and any relevant details..."
-                      maxLength={500}
+                      maxLength={2000}
+                      minLength={10}
                     />
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      {formData.description.length}/500 characters
+                    <p className={`mt-1 text-xs ${
+                      formData.description.length < 10
+                        ? 'text-red-500 dark:text-red-400'
+                        : formData.description.length >= 10
+                        ? 'text-green-600 dark:text-green-400'
+                        : 'text-gray-500 dark:text-gray-400'
+                    }`}>
+                      {formData.description.length}/2000 characters (minimum 10)
                     </p>
                   </div>
 
@@ -343,7 +453,7 @@ export default function CreateTicketForm({ isOpen, onClose, onSuccess }: CreateT
                       required
                       value={formData.category}
                       onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                      className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className={inputBaseClass}
                     >
                       <option value="">Select category</option>
                       <option value="plumbing">Plumbing</option>
@@ -365,15 +475,29 @@ export default function CreateTicketForm({ isOpen, onClose, onSuccess }: CreateT
                   {/* Contact Phone */}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      Contact Phone
+                      Contact Phone <span className="text-red-500">*</span>
                     </label>
-                    <input
-                      type="tel"
-                      value={formData.contactPhone}
-                      onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
-                      className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="+1 (555) 000-0000"
-                    />
+                    <div className={`${inputBaseClass} ticket-phone-input-container`}>
+                      <PhoneInput
+                        placeholder="Enter phone number"
+                        value={phoneInputValue || undefined}
+                        onChange={(value) =>
+                          setFormData({ ...formData, contactPhone: value || '' })
+                        }
+                        defaultCountry="IN"
+                        international
+                        countryCallingCodeEditable={false}
+                        className="w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                      />
+                    </div>
+                    {formData.contactPhone && !isValidPhoneNumber(formData.contactPhone) && (
+                      <p className="mt-1 text-xs text-red-500 dark:text-red-400">
+                        Phone number length/format is invalid for the selected country.
+                      </p>
+                    )}
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Include country extension (e.g. +91, +1). Length is validated by country.
+                    </p>
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                       Location will be set from your building:{' '}
                       {userProfile?.buildingName || 'Not assigned'}
@@ -419,14 +543,14 @@ export default function CreateTicketForm({ isOpen, onClose, onSuccess }: CreateT
                     <button
                       type="button"
                       onClick={onClose}
-                      className="flex-1 px-6 py-3 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 text-gray-700 dark:text-gray-300 font-semibold rounded-lg transition-colors"
+                      className="flex-1 px-6 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-semibold rounded-xl transition-colors"
                       disabled={loading}
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      className="flex-1 px-6 py-3 bg-linear-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-blue-600/25"
                       disabled={loading}
                     >
                       {loading ? (
@@ -473,6 +597,114 @@ export default function CreateTicketForm({ isOpen, onClose, onSuccess }: CreateT
                     </button>
                   </div>
                 </form>
+
+                <style jsx global>{`
+                  .ticket-phone-input-container {
+                    padding-top: 0.625rem !important;
+                    padding-bottom: 0.625rem !important;
+                  }
+
+                  .ticket-phone-input-container .PhoneInput {
+                    display: flex !important;
+                    flex-direction: row !important;
+                    align-items: center !important;
+                    background: transparent !important;
+                    border: none !important;
+                    padding: 0 !important;
+                    width: 100%;
+                  }
+
+                  .ticket-phone-input-container:focus-within {
+                    border-color: rgb(59 130 246 / 1);
+                    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+                  }
+
+                  .ticket-phone-input-container .PhoneInputCountry {
+                    display: flex !important;
+                    align-items: center !important;
+                    margin-right: 0.75rem;
+                    flex-shrink: 0;
+                    order: -1;
+                  }
+
+                  .ticket-phone-input-container .PhoneInputCountryCallingCode {
+                    color: #ffffff !important;
+                    font-size: 0.95rem;
+                  }
+                  .dark .ticket-phone-input-container .PhoneInputCountryCallingCode {
+                    color: #ffffff !important;
+                  }
+
+                  .ticket-phone-input-container .PhoneInputInput {
+                    background: transparent !important;
+                    outline: none !important;
+                    border: none !important;
+                    padding: 0 !important;
+                    color: #ffffff !important;
+                    flex: 1 1 auto !important;
+                    min-width: 0;
+                    width: 100% !important;
+                    font-size: 1rem;
+                    line-height: 1.5rem;
+                  }
+                  .dark .ticket-phone-input-container .PhoneInputInput {
+                    color: #ffffff !important;
+                  }
+                  .ticket-phone-input-container .PhoneInputInput::placeholder {
+                    color: #9ca3af;
+                  }
+
+                  .ticket-phone-input-container .PhoneInputCountryIcon {
+                    width: 1.5rem;
+                    height: 1rem;
+                    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+                    border-radius: 2px;
+                    flex-shrink: 0;
+                  }
+                  .dark .ticket-phone-input-container .PhoneInputCountryIcon {
+                    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
+                  }
+
+                  .ticket-phone-input-container .PhoneInputCountrySelect {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    height: 100%;
+                    width: 100%;
+                    z-index: 1;
+                    border: 0;
+                    opacity: 0;
+                    cursor: pointer;
+                  }
+
+                  .ticket-phone-input-container .PhoneInputCountrySelect option {
+                    color: #111827;
+                    background-color: #ffffff;
+                  }
+
+                  .dark .ticket-phone-input-container .PhoneInputCountrySelect option {
+                    color: #f9fafb;
+                    background-color: #111827;
+                  }
+
+                  .ticket-phone-input-container .PhoneInputCountrySelectArrow {
+                    display: block;
+                    margin-left: 0.35rem;
+                    width: 0.35rem;
+                    height: 0.35rem;
+                    border-style: solid;
+                    border-color: #6b7280;
+                    border-top-width: 0;
+                    border-bottom-width: 1.5px;
+                    border-left-width: 0;
+                    border-right-width: 1.5px;
+                    transform: rotate(45deg);
+                  }
+                  .dark .ticket-phone-input-container .PhoneInputCountrySelectArrow {
+                    border-color: #9ca3af;
+                  }
+                `}</style>
+                </div>
               </Dialog.Panel>
             </Transition.Child>
           </div>

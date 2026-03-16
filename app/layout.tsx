@@ -44,14 +44,6 @@ export default function RootLayout({
               }
               body { min-height: 100vh; }
               #__next { min-height: 100vh; }
-              /* Instant fade-in animation */
-              body > * {
-                animation: simpleFadeIn 0.2s ease-out;
-              }
-              @keyframes simpleFadeIn {
-                from { opacity: 0; }
-                to { opacity: 1; }
-              }
             `,
           }}
         />

@@ -23,10 +23,13 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       buildings: buildings.map(b => ({
-        id: b._id?.toString() || b.id || '',
+        id: b.id || b._id?.toString() || '',
         name: b.name,
         address: b.address,
+        state: b.state,
+        area: b.area,
         joinCode: b.joinCode,
+        adminId: b.adminId,
         createdAt: b.createdAt
       }))
     });

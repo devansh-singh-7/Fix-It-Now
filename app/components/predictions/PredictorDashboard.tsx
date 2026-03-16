@@ -1,14 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RiskCard } from './RiskCard';
-import type { AssetRisk, RiskBucket, UserRole, SubscriptionTier } from '@/app/lib/types';
+import type { AssetRisk, RiskBucket, UserRole } from '@/app/lib/types';
 import { canViewCostImpact } from '@/app/lib/predictor-access';
 
 interface PredictorDashboardProps {
   userRole: UserRole;
-  subscriptionTier?: SubscriptionTier | null;
   buildingId?: string;
 }
 
@@ -23,6 +22,8 @@ interface APIResponse {
     low: number;
   };
   assets: AssetRisk[];
+  requiresServiceEntries?: boolean;
+  message?: string;
   error?: string;
 }
 
@@ -34,31 +35,25 @@ interface Building {
 
 export function PredictorDashboard({
   userRole,
-  subscriptionTier,
   buildingId: propBuildingId,
 }: PredictorDashboardProps) {
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>(propBuildingId || '');
   const [selectedAssetType, setSelectedAssetType] = useState<string>('all');
   const [selectedTimeRange, setSelectedTimeRange] = useState<string>('30days');
   const [selectedAsset, setSelectedAsset] = useState<AssetRisk | null>(null);
+  const [assetSearchQuery, setAssetSearchQuery] = useState('');
 
   // Buildings list state
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [loadingBuildings, setLoadingBuildings] = useState(true);
 
-  // Search state for building autocomplete
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const suggestionsRef = useRef<HTMLDivElement>(null);
-
   // API state
   const [assetRisks, setAssetRisks] = useState<AssetRisk[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [predictionMessage, setPredictionMessage] = useState<string | null>(null);
 
-  const showCostImpact = canViewCostImpact(userRole, subscriptionTier);
+  const showCostImpact = canViewCostImpact(userRole);
 
   // Fetch buildings list on mount
   useEffect(() => {
@@ -73,11 +68,13 @@ export function PredictorDashboard({
         });
         const data = await response.json();
 
-        if (data.success && data.buildings) {
-          setBuildings(data.buildings);
+        const fetchedBuildings = data.data || data.buildings || [];
+
+        if (data.success && Array.isArray(fetchedBuildings)) {
+          setBuildings(fetchedBuildings);
 
           // Auto-select first building if none provided and no building in localStorage
-          if (!propBuildingId && data.buildings.length > 0) {
+          if (!propBuildingId && fetchedBuildings.length > 0) {
             const userProfile = localStorage.getItem('userProfile');
             if (userProfile) {
               const profile = JSON.parse(userProfile);
@@ -89,10 +86,10 @@ export function PredictorDashboard({
               if (storedBuildingId) {
                 setSelectedBuildingId(storedBuildingId);
               } else {
-                setSelectedBuildingId(data.buildings[0].id);
+                setSelectedBuildingId(fetchedBuildings[0].id);
               }
             } else {
-              setSelectedBuildingId(data.buildings[0].id);
+              setSelectedBuildingId(fetchedBuildings[0].id);
             }
           }
         }
@@ -106,33 +103,6 @@ export function PredictorDashboard({
     fetchBuildings();
   }, [propBuildingId]);
 
-  // Click outside handler to close suggestions
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        searchInputRef.current &&
-        !searchInputRef.current.contains(event.target as Node) &&
-        suggestionsRef.current &&
-        !suggestionsRef.current.contains(event.target as Node)
-      ) {
-        setShowSuggestions(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Sync search query with selected building name
-  useEffect(() => {
-    if (selectedBuildingId && buildings.length > 0 && !searchQuery) {
-      const building = buildings.find((b) => b.id === selectedBuildingId);
-      if (building) {
-        setSearchQuery(building.name);
-      }
-    }
-  }, [selectedBuildingId, buildings, searchQuery]);
-
   // Fetch predictions when building changes
   useEffect(() => {
     if (!selectedBuildingId) {
@@ -143,6 +113,7 @@ export function PredictorDashboard({
     const fetchPredictions = async () => {
       setLoading(true);
       setError(null);
+      setPredictionMessage(null);
 
       try {
         const storedProfile = localStorage.getItem('userProfile');
@@ -156,6 +127,10 @@ export function PredictorDashboard({
 
         if (!response.ok || !data.success) {
           throw new Error(data.error || 'Failed to fetch predictions');
+        }
+
+        if (data.requiresServiceEntries && data.message) {
+          setPredictionMessage(data.message);
         }
 
         // Convert dates from strings
@@ -185,6 +160,23 @@ export function PredictorDashboard({
     if (selectedAssetType !== 'all' && asset.assetType !== selectedAssetType) {
       return false;
     }
+
+    const normalizedQuery = assetSearchQuery.trim().toLowerCase();
+    if (normalizedQuery) {
+      const searchableText = [
+        asset.assetName,
+        asset.assetType,
+        asset.buildingName,
+        ...(asset.contributingFactors || []),
+      ]
+        .join(' ')
+        .toLowerCase();
+
+      if (!searchableText.includes(normalizedQuery)) {
+        return false;
+      }
+    }
+
     return true;
   });
 
@@ -203,6 +195,9 @@ export function PredictorDashboard({
     low: groupedAssets.low.length,
     total: filteredAssets.length,
   };
+  const highRiskPct = riskCounts.total > 0 ? Math.round((riskCounts.high / riskCounts.total) * 100) : 0;
+  const mediumRiskPct = riskCounts.total > 0 ? Math.round((riskCounts.medium / riskCounts.total) * 100) : 0;
+  const lowRiskPct = riskCounts.total > 0 ? Math.round((riskCounts.low / riskCounts.total) * 100) : 0;
 
   // Loading state
   if (loading) {
@@ -263,161 +258,56 @@ export function PredictorDashboard({
 
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* Building Search Autocomplete */}
-          <div className="relative min-w-[280px]">
-            <div className="relative">
-              <svg
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setShowSuggestions(true);
-                  setHighlightedIndex(-1);
-                }}
-                onFocus={() => setShowSuggestions(true)}
-                onKeyDown={(e) => {
-                  const filteredBuildings = buildings.filter(
-                    (b) =>
-                      b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      b.address?.toLowerCase().includes(searchQuery.toLowerCase())
-                  );
-                  if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    setHighlightedIndex((prev) =>
-                      prev < filteredBuildings.length - 1 ? prev + 1 : prev
-                    );
-                  } else if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : -1));
-                  } else if (e.key === 'Enter' && highlightedIndex >= 0) {
-                    e.preventDefault();
-                    const selected = filteredBuildings[highlightedIndex];
-                    if (selected) {
-                      setSelectedBuildingId(selected.id);
-                      setSearchQuery(selected.name);
-                      setShowSuggestions(false);
-                    }
-                  } else if (e.key === 'Escape') {
-                    setShowSuggestions(false);
-                  }
-                }}
-                placeholder={loadingBuildings ? 'Loading buildings...' : 'Search buildings...'}
-                className="w-full pl-10 pr-8 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
-                disabled={loadingBuildings}
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => {
-                    setSearchQuery('');
-                    setSelectedBuildingId('');
-                    searchInputRef.current?.focus();
-                  }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              )}
-              {loadingBuildings && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                </div>
-              )}
-            </div>
+          <select
+            value={selectedBuildingId}
+            onChange={(e) => setSelectedBuildingId(e.target.value)}
+            className="min-w-[260px] px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            disabled={loadingBuildings}
+          >
+            <option value="">{loadingBuildings ? 'Loading buildings...' : 'Select building'}</option>
+            {buildings.map((building) => (
+              <option key={building.id} value={building.id}>
+                {building.name}
+              </option>
+            ))}
+          </select>
 
-            {/* Suggestions Dropdown */}
-            <AnimatePresence>
-              {showSuggestions && !loadingBuildings && (
-                <motion.div
-                  ref={suggestionsRef}
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.15 }}
-                  className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto"
-                >
-                  {buildings.filter(
-                    (b) =>
-                      b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      b.address?.toLowerCase().includes(searchQuery.toLowerCase())
-                  ).length === 0 ? (
-                    <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                      No buildings found matching &quot;{searchQuery}&quot;
-                    </div>
-                  ) : (
-                    buildings
-                      .filter(
-                        (b) =>
-                          b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          b.address?.toLowerCase().includes(searchQuery.toLowerCase())
-                      )
-                      .map((building, index) => (
-                        <button
-                          key={building.id}
-                          onClick={() => {
-                            setSelectedBuildingId(building.id);
-                            setSearchQuery(building.name);
-                            setShowSuggestions(false);
-                          }}
-                          onMouseEnter={() => setHighlightedIndex(index)}
-                          className={`w-full px-4 py-3 text-left flex items-center gap-3 transition-colors ${
-                            highlightedIndex === index
-                              ? 'bg-blue-50 dark:bg-blue-900/30'
-                              : 'hover:bg-gray-50 dark:hover:bg-gray-700'
-                          } ${selectedBuildingId === building.id ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
-                        >
-                          <div className="shrink-0 w-8 h-8 rounded-lg bg-linear-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-medium">
-                            {building.name.charAt(0).toUpperCase()}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                              {building.name}
-                            </p>
-                            {building.address && (
-                              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                                {building.address}
-                              </p>
-                            )}
-                          </div>
-                          {selectedBuildingId === building.id && (
-                            <svg
-                              className="w-5 h-5 text-blue-500"
-                              fill="currentColor"
-                              viewBox="0 0 20 20"
-                            >
-                              <path
-                                fillRule="evenodd"
-                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
-                          )}
-                        </button>
-                      ))
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
+          <div className="relative min-w-[260px]">
+            <svg
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+            <input
+              type="text"
+              value={assetSearchQuery}
+              onChange={(e) => setAssetSearchQuery(e.target.value)}
+              placeholder="Search assets or factors..."
+              className="w-full pl-10 pr-8 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
+            />
+            {assetSearchQuery && (
+              <button
+                onClick={() => setAssetSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            )}
           </div>
 
           <select
@@ -477,6 +367,12 @@ export function PredictorDashboard({
       {/* Main content - only show when building is selected */}
       {selectedBuildingId && (
         <>
+          {predictionMessage && (
+            <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
+              <p className="text-sm text-blue-800 dark:text-blue-300">{predictionMessage}</p>
+            </div>
+          )}
+
           {/* Summary Stats */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
@@ -598,13 +494,13 @@ export function PredictorDashboard({
                     <div className="flex justify-between text-sm mb-1">
                       <span className="text-gray-600 dark:text-gray-400">High Risk</span>
                       <span className="font-medium text-red-600 dark:text-red-400">
-                        {Math.round((riskCounts.high / riskCounts.total) * 100)}%
+                        {highRiskPct}%
                       </span>
                     </div>
                     <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                       <motion.div
                         initial={{ width: 0 }}
-                        animate={{ width: `${(riskCounts.high / riskCounts.total) * 100}%` }}
+                        animate={{ width: `${highRiskPct}%` }}
                         transition={{ duration: 0.8, ease: 'easeOut' }}
                         className="h-full bg-red-500 rounded-full"
                       />
@@ -616,13 +512,13 @@ export function PredictorDashboard({
                     <div className="flex justify-between text-sm mb-1">
                       <span className="text-gray-600 dark:text-gray-400">Medium Risk</span>
                       <span className="font-medium text-amber-600 dark:text-amber-400">
-                        {Math.round((riskCounts.medium / riskCounts.total) * 100)}%
+                        {mediumRiskPct}%
                       </span>
                     </div>
                     <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                       <motion.div
                         initial={{ width: 0 }}
-                        animate={{ width: `${(riskCounts.medium / riskCounts.total) * 100}%` }}
+                        animate={{ width: `${mediumRiskPct}%` }}
                         transition={{ duration: 0.8, ease: 'easeOut', delay: 0.1 }}
                         className="h-full bg-amber-500 rounded-full"
                       />
@@ -634,13 +530,13 @@ export function PredictorDashboard({
                     <div className="flex justify-between text-sm mb-1">
                       <span className="text-gray-600 dark:text-gray-400">Low Risk</span>
                       <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                        {Math.round((riskCounts.low / riskCounts.total) * 100)}%
+                        {lowRiskPct}%
                       </span>
                     </div>
                     <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                       <motion.div
                         initial={{ width: 0 }}
-                        animate={{ width: `${(riskCounts.low / riskCounts.total) * 100}%` }}
+                        animate={{ width: `${lowRiskPct}%` }}
                         transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
                         className="h-full bg-emerald-500 rounded-full"
                       />
@@ -683,14 +579,23 @@ export function PredictorDashboard({
               <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5">
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Quick Actions</h3>
                 <div className="space-y-2">
-                  <button className="w-full text-left px-4 py-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm font-medium text-gray-700 dark:text-gray-300">
-                    📋 Generate Maintenance Report
+                  <button className="w-full text-left px-4 py-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm font-medium text-gray-700 dark:text-gray-300 inline-flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    Generate Maintenance Report
                   </button>
-                  <button className="w-full text-left px-4 py-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm font-medium text-gray-700 dark:text-gray-300">
-                    📅 Schedule Preventive Tasks
+                  <button className="w-full text-left px-4 py-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm font-medium text-gray-700 dark:text-gray-300 inline-flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Schedule Preventive Tasks
                   </button>
-                  <button className="w-full text-left px-4 py-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm font-medium text-gray-700 dark:text-gray-300">
-                    📊 Export Risk Analysis
+                  <button className="w-full text-left px-4 py-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm font-medium text-gray-700 dark:text-gray-300 inline-flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12h3v8H7v-8zM14 4h3v16h-3V4zM3 16h3v4H3v-4z" />
+                    </svg>
+                    Export Risk Analysis
                   </button>
                 </div>
               </div>

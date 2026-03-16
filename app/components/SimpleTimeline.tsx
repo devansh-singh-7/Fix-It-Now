@@ -91,9 +91,9 @@ export default function SimpleTimeline() {
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">{task.description}</p>
                     
                     <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-                      <span>📅 {new Date(task.scheduled_date).toLocaleDateString()}</span>
-                      <span>🔄 {task.frequency}</span>
-                      {task.asset_id && <span>🔧 Asset: {task.asset_id}</span>}
+                      <span>Date: {new Date(task.scheduled_date).toLocaleDateString()}</span>
+                      <span>Frequency: {task.frequency}</span>
+                      {task.asset_id && <span>Asset: {task.asset_id}</span>}
                     </div>
                   </div>
                 </div>

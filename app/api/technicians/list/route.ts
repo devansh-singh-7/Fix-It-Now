@@ -6,6 +6,7 @@ import type { Filter, Document } from 'mongodb';
 interface TechnicianQuery extends Filter<Document> {
   role: string;
   buildingId?: string;
+  $or?: Array<Record<string, unknown>>;
 }
 
 /**
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
     // Build query based on whether buildingId is provided
     const query: TechnicianQuery = { role: 'technician' };
     if (buildingId) {
-      query.buildingId = buildingId;
+      query.$or = [{ buildingId }, { building_id: buildingId }];
     }
 
     // Fetch technicians from MongoDB

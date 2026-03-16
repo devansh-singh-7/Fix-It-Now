@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import type { UserRole, SubscriptionTier } from '@/app/lib/types';
+import type { UserRole } from '@/app/lib/types';
 
 // Lazy load components based on access level
 const NavBar = dynamic(() => import('@/app/components/NavBar'), { ssr: false });
@@ -31,7 +31,7 @@ function LoadingState() {
 
 interface UserState {
   role: UserRole;
-  subscriptionTier?: SubscriptionTier | null;
+
   buildingId?: string;
 }
 
@@ -61,36 +61,15 @@ export default function PredictionsPage() {
             ? profile.role?.role || profile.role
             : profile.role || 'resident';
 
-        // Extract subscription tier
-        const extractedTier: SubscriptionTier | null =
-          profile.subscriptionTier ||
-          (profile.subscriptionPlan === 'ENTERPRISE'
-            ? 1
-            : profile.subscriptionPlan === 'PRO'
-              ? 2
-              : profile.subscriptionPlan === 'BASIC'
-                ? 3
-                : null);
-
         // Extract buildingId
         const extractedBuildingId =
           typeof profile.buildingId === 'object'
             ? profile.buildingId?.buildingId || profile.buildingId
             : profile.buildingId;
 
-        const isAllowed = extractedRoleRaw === 'admin' || extractedRoleRaw === 'owner';
-        if (!isAllowed) {
-          sessionStorage.setItem(
-            'accessDeniedMessage',
-            'Access denied: only building admins/owners can view predictions.'
-          );
-          router.replace('/dashboard?accessDenied=predictions');
-          return;
-        }
-
         setUser({
           role: extractedRoleRaw as UserRole,
-          subscriptionTier: extractedTier,
+
           buildingId: extractedBuildingId,
         });
       } catch (error) {
@@ -122,7 +101,7 @@ export default function PredictionsPage() {
         {user && (
           <PredictorDashboard
             userRole={user.role}
-            subscriptionTier={user.subscriptionTier}
+
             buildingId={user.buildingId}
           />
         )}

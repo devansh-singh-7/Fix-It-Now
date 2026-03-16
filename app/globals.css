@@ -14,11 +14,6 @@ html {
   }
 }
 
-/* Prevent layout shifts during font loading */
-* {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-}
-
 /* Ensure body fills viewport */
 body {
   min-height: 100vh;
@@ -37,7 +32,7 @@ body {
   --foreground: #171717;
 
   /* Design System Tokens */
-  --ff-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --ff-sans: var(--font-geist-sans), system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --bg: #f6f7fb;
   --card: #ffffff;
   --muted: #6b7280;
@@ -128,24 +123,6 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Performance optimizations for scrolling */
-section {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 500px;
-}
-
-article {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 300px;
-}
-
-/* Optimize will-change for frequently animated elements */
-.group,
-motion-div,
-[data-motion] {
-  will-change: transform;
-}
-
 /* Utility Classes */
 .card {
   background: var(--card);
@@ -202,7 +179,12 @@ a,
 input,
 select,
 textarea {
-  transition: all var(--motion-fast) var(--ease-ui);
+  transition: color var(--motion-fast) var(--ease-ui),
+    background-color var(--motion-fast) var(--ease-ui),
+    border-color var(--motion-fast) var(--ease-ui),
+    opacity var(--motion-fast) var(--ease-ui),
+    transform var(--motion-fast) var(--ease-ui),
+    box-shadow var(--motion-fast) var(--ease-ui);
 }
 
 /* Pulse animation for status indicators (reduced-motion safe) */
@@ -364,7 +346,7 @@ textarea {
 
 /* -------- FixItNow design tokens & utilities (append) -------- */
 :root {
-  --ff-sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  --ff-sans: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
   --bg: #f8fafc;
   --card: #ffffff;
   --card-contrast-text: #0f172a;

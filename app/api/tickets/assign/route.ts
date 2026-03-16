@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { assignTicket, getUserRole } from '@/app/lib/database';
+import { getDatabase } from '@/app/lib/mongodb';
 
 export async function POST(request: Request) {
   try {
@@ -16,25 +17,31 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verify the assigner is an admin
+    // Verify the assigner is authorized
     const assignerRole = await getUserRole(assignedBy);
-    if (assignerRole !== 'admin') {
+    if (assignerRole !== 'admin' && assignerRole !== 'owner') {
       return NextResponse.json(
         {
           success: false,
-          error: 'Only admins can assign tickets to technicians'
+          error: 'Only admins or owners can assign tickets to technicians'
         },
         { status: 403 }
       );
     }
 
-    // Verify the technician exists and has the correct role
-    const technicianRole = await getUserRole(technicianId);
-    if (technicianRole !== 'technician') {
+    // Verify the technician exists in MongoDB and has the correct role.
+    // Support both legacy uid and firebaseUid field names.
+    const db = await getDatabase();
+    const technician = await db.collection('users').findOne({
+      role: 'technician',
+      $or: [{ firebaseUid: technicianId }, { uid: technicianId }],
+    });
+
+    if (!technician) {
       return NextResponse.json(
         {
           success: false,
-          error: 'The selected user is not a technician'
+          error: 'The selected user is not a valid technician'
         },
         { status: 400 }
       );
@@ -48,7 +55,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to assign ticket'
+        error: error instanceof Error ? error.message : 'Failed to assign ticket'
       },
       { status: 500 }
     );

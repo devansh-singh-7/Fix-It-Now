@@ -32,6 +32,7 @@ export interface NormalizedTicket {
   assignedTechnicianPhone: string | null;
   contactPhone: string | null;
   imageUrls: string[];
+  completionImageUrls: string[];
   buildingId: string | null;
   buildingName: string;
   timeline: TimelineEvent[];
@@ -252,6 +253,9 @@ export function normalizeTicket(ticket: unknown): NormalizedTicket {
     ) || null,
     contactPhone: getString(t.contactPhone || t.contact_phone, '') || null,
     imageUrls: getArray(t.imageUrls || t.image_urls) as string[],
+    completionImageUrls: getArray(
+      t.completionImageUrls || t.completion_image_urls || t.completedWorkImageUrls
+    ) as string[],
     buildingId: (t.buildingId || t.building_id || null) as string | null,
     buildingName: getString(
       t.buildingName || t.building_name || t.building,
